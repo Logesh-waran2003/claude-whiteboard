@@ -1,0 +1,12 @@
+{
+  "nodes": [
+    { "id": "source", "type": "text", "text": "Source", "x": 0, "y": 0, "width": 160, "height": 64 },
+    { "id": "sink", "type": "text", "text": "Sink", "x": 400, "y": 0, "width": 160, "height": 64 },
+    { "id": "other", "type": "text", "text": "Other", "x": 0, "y": 200, "width": 160, "height": 64 },
+    { "id": "worker", "type": "text", "text": "Worker", "x": 400, "y": 200, "width": 160, "height": 64 }
+  ],
+  "edges": [
+    { "id": "e_direct", "fromNode": "source", "toNode": "sink" },
+    { "id": "e_elbow", "fromNode": "other", "toNode": "worker", "fromSide": "right", "toSide": "left", "x-route": "elbow", "x-points": [{ "x": 180, "y": 232 }, { "x": 180, "y": 32 }, { "x": 380, "y": 32 }, { "x": 380, "y": 232 }] }
+  ]
+}

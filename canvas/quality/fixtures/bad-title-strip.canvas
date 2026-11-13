@@ -1,0 +1,10 @@
+{
+  "nodes": [
+    { "id": "team", "type": "group", "label": "Team", "x": 60, "y": 120, "width": 400, "height": 300 },
+    { "id": "alice", "type": "text", "text": "Alice", "x": 100, "y": 200, "width": 160, "height": 64, "x-parent": "team" },
+    { "id": "vendor", "type": "text", "text": "Vendor", "x": -20, "y": 20, "width": 160, "height": 64 }
+  ],
+  "edges": [
+    { "id": "e_band", "fromNode": "vendor", "toNode": "alice" }
+  ]
+}

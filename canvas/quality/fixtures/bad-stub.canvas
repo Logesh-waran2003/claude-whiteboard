@@ -1,0 +1,9 @@
+{
+  "nodes": [
+    { "id": "left", "type": "text", "text": "Left", "x": 0, "y": 0, "width": 160, "height": 64 },
+    { "id": "right", "type": "text", "text": "Right", "x": 400, "y": 200, "width": 160, "height": 64 }
+  ],
+  "edges": [
+    { "id": "e_stub", "fromNode": "left", "toNode": "right", "fromSide": "right", "toSide": "left", "x-route": "elbow", "x-points": [{ "x": 300, "y": 100 }] }
+  ]
+}

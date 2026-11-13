@@ -1,0 +1,13 @@
+{
+  "nodes": [
+    { "id": "editor", "type": "text", "text": "Editor", "x": 0, "y": 0, "width": 160, "height": 64 },
+    { "id": "server", "type": "text", "text": "Server", "x": 200, "y": 0, "width": 160, "height": 64 },
+    { "id": "tool", "type": "text", "text": "Tool", "x": 0, "y": 104, "width": 160, "height": 64 },
+    { "id": "agent", "type": "text", "text": "Agent", "x": 200, "y": 104, "width": 160, "height": 64 }
+  ],
+  "edges": [
+    { "id": "e_ref", "fromNode": "editor", "toNode": "server", "label": "editor Ref" },
+    { "id": "e_prompt", "fromNode": "editor", "toNode": "tool", "label": "prompt" },
+    { "id": "e_call", "fromNode": "server", "toNode": "tool", "label": "2. tool call" }
+  ]
+}

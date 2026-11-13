@@ -1,0 +1,10 @@
+{
+  "nodes": [
+    { "id": "core", "type": "group", "label": "Core", "x": 200, "y": 0, "width": 400, "height": 300 },
+    { "id": "client", "type": "text", "text": "Client", "x": 0, "y": 40, "width": 120, "height": 64 },
+    { "id": "store", "type": "text", "text": "Store", "x": 240, "y": 200, "width": 160, "height": 64, "x-parent": "core" }
+  ],
+  "edges": [
+    { "id": "e_run", "fromNode": "client", "toNode": "store", "fromSide": "right", "toSide": "left", "x-route": "elbow", "x-points": [{ "x": 203, "y": 72 }, { "x": 203, "y": 232 }] }
+  ]
+}

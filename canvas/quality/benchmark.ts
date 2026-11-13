@@ -1,0 +1,23 @@
+// M6. Benchmark prompts. Each one is a task an agent will get; the agent run that draws them comes later.
+export const BENCHMARK: { id: string; prompt: string; kind: 'architecture' | 'flow' | 'sequence' | 'er' | 'stickies' | 'matrix' | 'mindmap' | 'timeline' }[] = [
+  { id: 'arch-repo', kind: 'architecture', prompt: 'Map the architecture of this repo: browser, Bun server, Agent SDK, MCP tools, repo files, notes.' },
+  { id: 'arch-deploy', kind: 'architecture', prompt: 'Draw the deployment layout: CDN, web app, API, worker queue, Postgres, object storage, third-party auth.' },
+  { id: 'arch-mobile', kind: 'architecture', prompt: 'Show how the mobile app talks to the backend: app shell, offline cache, push service, REST API, analytics.' },
+  { id: 'arch-agent', kind: 'architecture', prompt: 'Diagram an agent system: user chat, planner, tool router, three tools, memory store, and the model provider.' },
+  { id: 'flow-checkout', kind: 'flow', prompt: 'Flowchart the checkout: cart, address, payment, retry on decline, order confirmation, email receipt.' },
+  { id: 'flow-onboard', kind: 'flow', prompt: 'Flow of new-user onboarding: sign up, verify email, pick a plan, invite team, first project created.' },
+  { id: 'flow-support', kind: 'flow', prompt: 'Support ticket triage flow: intake, auto-tag, priority rule, assign to queue, escalate after 4 hours, close.' },
+  { id: 'flow-deploy', kind: 'flow', prompt: 'Release process flow: branch, PR review, CI tests, staging deploy, smoke test, production deploy, rollback path.' },
+  { id: 'seq-oauth', kind: 'sequence', prompt: 'Sequence of a login with OAuth: browser, app server, identity provider, token exchange, session cookie.' },
+  { id: 'seq-payment', kind: 'sequence', prompt: 'Sequence of a card payment: client, API, payment provider webhook, order service, email service.' },
+  { id: 'seq-chat', kind: 'sequence', prompt: 'Sequence of one chat turn: user message, server, model call, streamed tokens, tool call, final reply.' },
+  { id: 'seq-sync', kind: 'sequence', prompt: 'Sequence of an offline edit syncing: device queue, reconnect, server merge, conflict notice, client update.' },
+  { id: 'er-core', kind: 'er', prompt: 'ER diagram for users, boards, shapes, edges: keys and one-to-many relations.' },
+  { id: 'er-billing', kind: 'er', prompt: 'ER diagram for billing: accounts, subscriptions, plans, invoices, invoice lines, payments.' },
+  { id: 'stickies-launch', kind: 'stickies', prompt: 'Group these 12 launch notes by theme: pricing, onboarding bug, dark mode, export, SSO, docs typo, speed, mobile, churn, referral, support hours, changelog.' },
+  { id: 'stickies-retro', kind: 'stickies', prompt: 'Sort this retro into columns: went well, went badly, try next sprint. Items: standups ran long, CI was fast, two outages, new hire onboarded, unclear ownership.' },
+  { id: 'matrix-strategy', kind: 'matrix', prompt: '2x2 map: one-shot vs live, cloud vs local. Place these tools: batch script, chat app, IDE plugin, hosted dashboard, desktop agent.' },
+  { id: 'matrix-priority', kind: 'matrix', prompt: 'Impact vs effort matrix for these 8 backlog items: search, export, undo, tags, sharing, offline mode, themes, API keys.' },
+  { id: 'mindmap-market', kind: 'mindmap', prompt: 'Mind map of the product idea: target users, core jobs, pricing, channels, risks, and open questions.' },
+  { id: 'timeline-roadmap', kind: 'timeline', prompt: 'Timeline of the next 6 months: alpha in March, beta in April, public launch in June, two marketing pushes, a pricing change.' },
+]

@@ -1,0 +1,16 @@
+{
+  "nodes": [
+    { "id": "client", "type": "group", "label": "Client", "x": 0, "y": 0, "width": 600, "height": 200 },
+    { "id": "browser", "type": "text", "text": "Browser", "x": 40, "y": 60, "width": 160, "height": 64, "x-parent": "client" },
+    { "id": "editor", "type": "text", "text": "Editor", "x": 400, "y": 60, "width": 160, "height": 64, "x-parent": "client" },
+    { "id": "server", "type": "group", "label": "Server", "x": 0, "y": 260, "width": 600, "height": 200 },
+    { "id": "bun", "type": "text", "text": "Bun server", "x": 220, "y": 320, "width": 160, "height": 64, "x-parent": "server" },
+    { "id": "data", "type": "group", "label": "Data", "x": 0, "y": 520, "width": 600, "height": 200 },
+    { "id": "files", "type": "text", "text": "Files", "x": 40, "y": 580, "width": 160, "height": 64, "x-parent": "data" },
+    { "id": "notes", "type": "text", "text": "Notes", "x": 400, "y": 580, "width": 160, "height": 64, "x-parent": "data" }
+  ],
+  "edges": [
+    { "id": "e_saves", "fromNode": "browser", "toNode": "notes", "label": "saves board" },
+    { "id": "e_reads", "fromNode": "editor", "toNode": "files", "label": "reads files" }
+  ]
+}

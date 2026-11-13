@@ -1,0 +1,11 @@
+{
+  "nodes": [
+    { "id": "ingest", "type": "text", "text": "Ingest", "x": 0, "y": 0, "width": 160, "height": 64 },
+    { "id": "index", "type": "text", "text": "Index", "x": 360, "y": 0, "width": 160, "height": 64 },
+    { "id": "serve", "type": "text", "text": "Serve", "x": 720, "y": 0, "width": 160, "height": 64 }
+  ],
+  "edges": [
+    { "id": "e_reads", "fromNode": "ingest", "toNode": "index", "label": "reads" },
+    { "id": "e_writes", "fromNode": "index", "toNode": "serve", "label": "writes" }
+  ]
+}

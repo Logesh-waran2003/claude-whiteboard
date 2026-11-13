@@ -1,0 +1,10 @@
+{
+  "nodes": [
+    { "id": "team", "type": "group", "label": "Team", "x": 0, "y": 0, "width": 400, "height": 300 },
+    { "id": "alice", "type": "text", "text": "Alice", "x": 40, "y": 60, "width": 160, "height": 64, "x-parent": "team" },
+    { "id": "vendor", "type": "text", "text": "Vendor", "x": 600, "y": 60, "width": 160, "height": 64 }
+  ],
+  "edges": [
+    { "id": "e_handoff", "fromNode": "alice", "toNode": "vendor", "label": "handoff" }
+  ]
+}

@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent-native canvas: plan, spec, milestones</title>
+<style>
+  :root {
+    --surface: #fcfcfb; --paper: #ffffff; --ink: #0b0b0b; --ink-2: #52514e; --rule: #e4e3df; --well: #f3f2ef;
+    --a: #2a78d6; --b: #eb6834; --c: #1baf7a; --d: #eda100;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--surface); color: var(--ink); font: 15px/1.55 var(--sans); }
+  main { max-width: 1120px; margin: 0 auto; padding: 40px 28px 80px; }
+  h1 { font-size: 30px; line-height: 1.2; margin: 0 0 6px; letter-spacing: -0.01em; }
+  h2 { font-size: 20px; margin: 48px 0 12px; padding-top: 20px; border-top: 1px solid var(--rule); }
+  h3 { font-size: 16px; margin: 24px 0 8px; }
+  p { margin: 0 0 10px; max-width: 76ch; }
+  .sub { color: var(--ink-2); margin-bottom: 24px; }
+  .decision { background: var(--paper); border: 1px solid var(--rule); border-left: 4px solid var(--a); padding: 16px 18px; border-radius: 6px; }
+  .decision p:last-child { margin: 0; }
+  table { width: 100%; border-collapse: collapse; background: var(--paper); font-size: 14px; }
+  th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--rule); }
+  th { font-weight: 600; color: var(--ink-2); background: var(--well); }
+  td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  code, pre { font-family: var(--mono); font-size: 13px; }
+  code { background: var(--well); padding: 1px 5px; border-radius: 4px; }
+  pre { background: var(--paper); border: 1px solid var(--rule); border-radius: 6px; padding: 14px; overflow-x: auto; line-height: 1.45; }
+  ul, ol { margin: 0 0 10px; padding-left: 22px; } li { margin: 3px 0; max-width: 80ch; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  .two > div { min-width: 0; }
+  .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: 0; }
+  .status { white-space: nowrap; }
+
+  /* Gantt */
+  .gantt { background: var(--paper); border: 1px solid var(--rule); border-radius: 6px; padding: 14px 14px 10px; overflow-x: auto; }
+  .g-grid { display: grid; grid-template-columns: 250px repeat(15, minmax(38px, 1fr)); min-width: 880px; position: relative; }
+  .g-head { font-size: 11.5px; color: var(--ink-2); text-align: center; padding: 0 0 8px; border-bottom: 1px solid var(--rule); line-height: 1.3; }
+  .g-head.week { border-left: 1px solid var(--rule); }
+  .g-label { font-size: 13.5px; padding: 9px 10px 9px 0; border-bottom: 1px solid var(--well); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .g-label b { font-weight: 600; margin-right: 4px; }
+  .g-cell { border-bottom: 1px solid var(--well); }
+  .g-bar { position: relative; align-self: center; height: 18px; border-radius: 4px; margin: 0 1px; cursor: default; }
+  .g-bar:hover, .g-bar:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+  .g-tip { display: none; position: absolute; left: 0; top: 24px; z-index: 5; width: 300px; background: var(--ink); color: #fff; font-size: 12.5px; line-height: 1.45; padding: 8px 10px; border-radius: 6px; }
+  .g-bar:hover .g-tip, .g-bar:focus-visible .g-tip { display: block; }
+  .g-legend { display: flex; gap: 18px; flex-wrap: wrap; font-size: 13px; color: var(--ink-2); margin: 10px 0 0; }
+  .g-ms { font-size: 12px; color: var(--ink-2); }
+  @media (max-width: 760px) { .two { grid-template-columns: 1fr; } main { padding: 24px 16px 60px; } }
+</style>
+</head>
+<body>
+<main>
+
+<h1>Agent-native canvas</h1>
+<p class="sub">Plan, spec and milestones. Written 2026-11-12. Product name: Agent Board. Research checked live on 2026-11-12.</p>
+
+<div class="decision">
+  <p><b>Recommendation:</b> build our own canvas in which agents describe a <em>graph</em> (nodes, edges, groups) and a layout engine places it. The canvas enforces the quality rules (no overlaps, no squeezed labels) after every change. Save boards as <b>JSON Canvas</b> files in the repo, so Obsidian opens them and git can diff them.</p>
+  <p><b>Effort:</b> 15 working days in 4 parallel tracks, ~45–60 agent-hours. Target finish: Thu 2026-12-03. Your reviews: ~30 min per milestone.</p>
+</div>
+
+<h2>1. What others do (checked 2026-11-12)</h2>
+<table>
+  <thead><tr><th>Project</th><th>Stars</th><th>Licence</th><th>How agents use it</th><th>What we take from it</th></tr></thead>
+  <tbody>
+    <tr><td><b>tldraw</b></td><td class="num">51,369</td><td>Custom. Production needs a key (trial, paid, or free hobby licence on application)</td><td>Agent starter kits. "Fairies" sent declarative createShape and updateShape actions. The newer <b>tldraw offline</b> is a local board where the agent writes code against the editor API</td><td>Send the viewport with every turn. Give the agent code-level power. <b>tldraw offline is our closest rival</b></td></tr>
+    <tr><td><b>Excalidraw</b></td><td class="num">135,514</td><td>MIT</td><td>"Skeleton API": a simplified element list that <code>convertToExcalidrawElements</code> expands into full elements. Arrows bind by id and carry labels</td><td>A small input schema that expands to full shapes. Agents make fewer mistakes with fewer fields</td></tr>
+    <tr><td>excalidraw-mcp</td><td class="num">5,663</td><td>not set on GitHub</td><td>Streams a diagram into a chat (Claude, ChatGPT, VS Code)</td><td>One-shot only: no memory, no repo. This is the gap we fill</td></tr>
+    <tr><td><b>Mermaid</b> / <b>D2</b></td><td class="num">91,080 / 25,832</td><td>MIT / MPL-2.0</td><td>The agent writes text and the tool lays it out</td><td><b>Agents write graphs well and pixels badly.</b> This is the core idea of our design</td></tr>
+    <tr><td>xyflow (React Flow)</td><td class="num">38,974</td><td>MIT</td><td>Node graph UI with nodes, edges and handles</td><td>An edge connects to a side of a node, not to a point. Clear interaction model</td></tr>
+    <tr><td>dagre / elkjs</td><td class="num">5,852 / 2,893</td><td>MIT / EPL-2.0 or GPL-3.0</td><td>Layout engines (layered graphs)</td><td>Ship dagre. ELK only as an optional plugin, because of its licence</td></tr>
+    <tr><td><b>JSON Canvas</b></td><td class="num">3,870</td><td>MIT</td><td>Obsidian's open file format: text, file, link and group nodes, plus edges</td><td>Use it as our file format, so your vault opens our boards</td></tr>
+    <tr><td>rough.js / perfect-freehand</td><td class="num">21,373 / 5,809</td><td>MIT / MIT</td><td>Hand-drawn shapes and pen strokes</td><td>The hand-drawn look without tldraw. Note: rough.js has not been updated since 2024-07</td></tr>
+  </tbody>
+</table>
+<p class="sub" style="margin-top:8px">Sources: GitHub API (stars, licences), github.com/tldraw/tldraw LICENSE.md, tldraw.dev/pricing, tldraw.dev/blog/harnessing-the-agents, jsoncanvas.org/spec/1.0, Excalidraw docs (element skeleton API). Out of scope: draw.io and Penpot, which are diagram and design tools, not agent canvases.</p>
+
+<h2>2. Why agents draw badly, and our answer</h2>
+<table>
+  <thead><tr><th>Cause (seen in our own boards)</th><th>Our design answer</th></tr></thead>
+  <tbody>
+    <tr><td>The agent guesses pixel coordinates, so shapes collide and arrows are long and diagonal</td><td><b>Graph in, layout out.</b> The agent sends nodes, edges and groups. dagre or the grid packer places them. Coordinates are optional</td></tr>
+    <tr><td>The agent cannot see the render, so labels overlap and wrap</td><td><b>Measured feedback.</b> Each change returns a quality report (overlaps, wraps, crossings). A PNG snapshot is available for vision</td></tr>
+    <tr><td>A batch half-applies, then fails</td><td><b>Transactions.</b> Validate the whole batch, then apply it atomically. Errors name the exact op and field</td></tr>
+    <tr><td>The user edits while the agent works</td><td><b>Versions and diffs.</b> Each read returns a version number. A write against an old version gets the diff, not a silent overwrite</td></tr>
+    <tr><td>A re-layout loses the meaning</td><td><b>Semantic fields</b> (role, layer, lane, pinned) live on each shape, so a re-layout keeps the structure</td></tr>
+  </tbody>
+</table>
+
+<h2>3. Spec</h2>
+<div class="two">
+<div>
+<h3>3.1 File format</h3>
+<p>A <code>.canvas</code> file following JSON Canvas 1.0, with <code>x-</code> extension fields. Unknown fields are kept on save.</p>
+<pre>{
+  "nodes": [
+    { "id": "api", "type": "text", "text": "Bun server",
+      "x": 0, "y": 0, "width": 240, "height": 120,
+      "x-shape": "rect", "x-by": "agent:claude",
+      "x-role": "service", "x-pin": false },
+    { "id": "srv", "type": "group", "label": "Local server",
+      "x-layout": "dag-lr" },
+    { "id": "f1", "type": "file", "file": "server/index.ts" }
+  ],
+  "edges": [
+    { "id": "e1", "fromNode": "ui", "toNode": "api",
+      "toEnd": "arrow", "label": "chat",
+      "x-route": "elbow" }
+  ]
+}</pre>
+<h3>3.2 Layout and invariants</h3>
+<ul>
+  <li>Group layouts: <code>dag-lr</code>, <code>dag-tb</code> (dagre), <code>grid</code> (stickies), <code>free</code>.</li>
+  <li>Groups are laid out recursively, inside first.</li>
+  <li>After every apply, these must hold: 0 text overlaps, 0 squeezed labels, children inside their group, a gap of 24 px or more, and edges that do not pass through nodes (elbow routing).</li>
+  <li>The engine never moves pinned shapes or user shapes.</li>
+</ul>
+</div>
+<div>
+<h3>3.3 Agent API (MCP and in-process)</h3>
+<table>
+  <tbody>
+    <tr><td><code>read_board</code></td><td>Compact text outline, version, and the diff since the agent last read</td></tr>
+    <tr><td><code>snapshot</code></td><td>PNG of the board or of chosen ids, for vision</td></tr>
+    <tr><td><code>apply</code></td><td>Atomic batch: add_node, add_edge, update, remove, group, set_layout. Returns ids and a quality report</td></tr>
+    <tr><td><code>layout</code></td><td>Lay out a group or the whole board again</td></tr>
+    <tr><td><code>check</code></td><td>Quality report only</td></tr>
+    <tr><td><code>find</code></td><td>Find shapes by text, file or role</td></tr>
+    <tr><td><code>focus</code></td><td>Move the user's camera</td></tr>
+  </tbody>
+</table>
+<pre>apply({ version: 41, ops: [
+  { op: "add_node", ref: "ui", text: "Browser", shape: "rect", parent: "app" },
+  { op: "add_edge", from: "ui", to: "api", label: "chat" },
+  { op: "set_layout", group: "app", layout: "dag-lr" }
+]})
+→ { version: 42, ids: { ui: "n_7f" },
+    quality: { overlaps: 0, wraps: 0, crossings: 1 } }</pre>
+<h3>3.4 Canvas for people</h3>
+<ul>
+  <li>React + SVG. Clean mode and hand-drawn mode (rough.js).</li>
+  <li>Select, marquee select, move, resize, text editing, copy and paste, shortcuts.</li>
+  <li>Undo history uses the <em>same ops</em> as the agent: one log, one undo stack.</li>
+  <li>Performance goal: 60 fps with 1,000 shapes, using viewport culling.</li>
+  <li>Not in v0: live multiplayer, images, mobile touch polish, plugins.</li>
+</ul>
+</div>
+</div>
+
+<h3>3.5 Quality score: how we prove "better"</h3>
+<p>We use 20 benchmark prompts (architecture, flow, sticky clustering, 2×2 map, sequence). A scorer measures overlaps, squeezed labels, edge crossings, edges through nodes, alignment and area. It runs in CI. <b>Day-6 baseline:</b> the current tldraw app. <b>Launch bar:</b> 0 overlaps and 0 squeezed labels on 20 of 20 prompts, and fewer crossings than the baseline.</p>
+
+<h2>4. Timeline</h2>
+<div class="gantt" role="img" aria-label="Gantt chart of 10 milestones over 15 working days, 13 Nov to 3 Dec 2026. The table below has the same data.">
+  <div class="g-grid" id="gantt"></div>
+  <div class="g-legend">
+    <span><span class="swatch" style="background:var(--a)"></span>A. Canvas core</span>
+    <span><span class="swatch" style="background:var(--b)"></span>B. Agent engine</span>
+    <span><span class="swatch" style="background:var(--c)"></span>C. Quality</span>
+    <span><span class="swatch" style="background:var(--d)"></span>D. Ship</span>
+    <span>Hover or tab to a bar for its "done when" test.</span>
+  </div>
+</div>
+
+<h2>5. Tracker</h2>
+<table id="tracker">
+  <thead><tr><th>#</th><th>Milestone</th><th>Track</th><th>Dates</th><th>Done when</th><th>Status</th></tr></thead>
+  <tbody></tbody>
+</table>
+
+<h2>6. AI integration: how others ship it, and what we ship</h2>
+<p class="sub">Checked 2026-11-12: tldraw repo (apps/mcp-app, .cursor-plugin), offline.tldraw.com, excalidraw-mcp README, plus.excalidraw.com/docs/mcp, developers.miro.com/docs/miro-mcp-tools, developers.figma.com MCP tools, help.figma.com "Figma skills for MCP", figma/mcp-server-guide skills, docs.eraser.io/mcp and the agent-integrations page, eraserlabs/eraser-io Claude plugin.</p>
+<table>
+  <thead><tr><th>Product</th><th>MCP</th><th>Skills</th><th>CLI / plugin</th><th>How the agent describes a drawing</th><th>Checks its own output?</th></tr></thead>
+  <tbody>
+    <tr><td><b>tldraw</b></td><td>MCP app in the repo (apps/mcp-app)</td><td>Internal dev skills only</td><td>Cursor plugin. <b>tldraw offline</b> desktop app: BYO agent (Claude Code, Codex, Pi, OpenCode), saves .tldraw files</td><td>The agent writes code against the editor and saves reusable scripts</td><td>Screenshots (agent kit)</td></tr>
+    <tr><td><b>Excalidraw</b></td><td>OSS MCP App (streams into the chat). Excalidraw+ MCP, public beta, API key</td><td>none found</td><td>Excalidraw+ CLI, REST API</td><td><b>Mermaid or semantic JSON</b>, laid out for you. Also charts, tables, decks</td><td><b>Yes:</b> each write reports text overflow, arrows through shapes and overlaps, and renders screenshots</td></tr>
+    <tr><td><b>Miro</b></td><td>Remote MCP, OAuth. Claude, Claude Code, Cursor</td><td><b>Served through MCP</b>: <code>canvas_get_canvas_composer_skill</code>, <code>canvas_load_format_skill</code></td><td>Node and Python clients</td><td><b>SVG DSL</b> ("canvas-composer"). Updates are diffed against the live board</td><td>Reads the board back as SVG</td></tr>
+    <tr><td><b>Figma / FigJam</b></td><td>Remote MCP: <code>generate_diagram</code>, <code>get_figjam</code>, <code>use_figma</code>, <code>get_screenshot</code></td><td><b>11 skills</b>, e.g. <code>figma-generate-diagram</code> ("MUST load before every call"), <code>figma-use-figjam</code></td><td>Claude Code and Cursor plugin (bundles the skills)</td><td><b>Mermaid</b> (5 diagram types). It cannot move single nodes afterwards</td><td><code>get_screenshot</code></td></tr>
+    <tr><td><b>Eraser</b></td><td>Remote MCP, OAuth or API key. Claude Code, Codex, Cursor, VS Code, Kiro and more</td><td><code>npx skills install eraserlabs/eraser-io</code></td><td>Claude Code plugin: <code>/eraser:diagram</code> skill + MCP</td><td>Eraser DSL, or a plain prompt that Eraser draws</td><td>Rendered image</td></tr>
+  </tbody>
+</table>
+
+<h3>What we learn</h3>
+<ol>
+  <li><b>Everyone ships 3 layers:</b> an MCP server (the tools), a skill (how to use the tools well), and a plugin that bundles both. Figma's skill says "load before every call". The skill carries the quality.</li>
+  <li><b>Agents send text formats, not pixels:</b> Mermaid (Figma, Excalidraw+), semantic JSON (Excalidraw+), SVG DSL (Miro), DSL (Eraser). This matches our "graph in, layout out" design.</li>
+  <li><b>Self-check is now expected.</b> Excalidraw+ already reports overlaps and arrows through shapes on each write. Our quality report alone is <em>not</em> unique. We need it anyway, and we must go further: a public benchmark and a CI check.</li>
+  <li><b>All of them are cloud and need an account, except tldraw offline.</b> tldraw offline is local and BYO agent, but uses a custom licence and saves .tldraw files.</li>
+  <li><b>No one makes the repo the source of truth.</b> No one checks a diagram against the code in CI (Eraser has Git sync, but cloud only).</li>
+</ol>
+
+<h3>What we ship (all MIT, all local)</h3>
+<table>
+  <thead><tr><th>Layer</th><th>What</th><th>Copied from</th><th>Milestone</th></tr></thead>
+  <tbody>
+    <tr><td><b>MCP server</b></td><td>stdio for local agents, streamable HTTP for the app. 7 tools: read_board, snapshot, apply, layout, check, find, focus. Input: ops, <b>Mermaid</b> or a semantic graph</td><td>Excalidraw+ (formats), Miro (diff on write)</td><td>M5</td></tr>
+    <tr><td><b>Skill</b></td><td><code>SKILL.md</code> + references per diagram type (architecture, flow, sequence, ER, sticky clustering, 2×2). Rules: read the repo first, never invent edges, mark gaps, run <code>check</code> before replying</td><td>Figma (per-type routing, "garbage in, garbage out")</td><td>M5</td></tr>
+    <tr><td><b>Skill served through MCP</b></td><td><code>get_skill</code> tool, so clients without skills support still get the guide</td><td>Miro</td><td>M5</td></tr>
+    <tr><td><b>CLI</b></td><td><code>open</code>, <code>render --png/--svg</code>, <code>check</code> (quality score, exit code for CI), <code>import mermaid</code>, <code>mcp</code> (start the server)</td><td>Excalidraw+ CLI, Eraser CI bot</td><td>M8</td></tr>
+    <tr><td><b>Plugin</b></td><td>One install for Claude Code (later Cursor, Codex): skill + MCP + <code>/board</code> command</td><td>Eraser, Figma, tldraw</td><td>M9</td></tr>
+    <tr><td><b>Built-in chat</b></td><td>The app's own panel (Agent SDK, your Claude Code login). Done today</td><td>Ours</td><td>✅</td></tr>
+  </tbody>
+</table>
+<p><b>Positioning:</b> "Excalidraw+'s agent quality, tldraw offline's local-first approach, Figma's skill discipline, and the repo as the source of truth. MIT, no account."</p>
+
+<h2>7. Risks</h2>
+<table>
+  <thead><tr><th>Risk</th><th>Plan</th></tr></thead>
+  <tbody>
+    <tr><td><b>tldraw offline</b> is a local agent board from a well-known team</td><td>Win on what they do not do: your repo and notes as context, JSON Canvas files in git, an MCP server any coding agent can use, MIT licence</td></tr>
+    <tr><td><b>Excalidraw+ MCP</b> already self-checks layout and renders screenshots</td><td>Match it in M4/M5, then win on local + free + the public benchmark + <code>check</code> in CI</td></tr>
+    <tr><td>Our canvas feels rougher than tldraw at launch</td><td>Keep tldraw behind <code>board.ts</code> until M7 parity passes. The demo shows the agent, not the drag feel</td></tr>
+    <tr><td>Layout fights the user's manual placement</td><td>The engine never moves user shapes or pinned shapes. "Re-layout" is a separate action the user chooses</td></tr>
+    <tr><td>Scope creep (multiplayer, images, plugins)</td><td>Listed as "not in v0". New ideas go to the post-launch list</td></tr>
+  </tbody>
+</table>
+
+<h2>8. Decisions needed from you</h2>
+<ol>
+  <li><b>Go or no-go</b> on building our own canvas (this plan).</li>
+  <li><b>Product name.</b> Needed by M9 (Dec 1).</li>
+  <li><b>Licence:</b> MIT (recommended, the same as Excalidraw).</li>
+</ol>
+
+</main>
+<script>
+// Working days from Fri 13 Nov 2026 (weekends skipped).
+const DAYS = ['13 Nov','16','17','18','19','20','23','24','25','26','27','30','1 Dec','2','3']
+const TRACK = { A: ['A. Canvas core', 'var(--a)'], B: ['B. Agent engine', 'var(--b)'], C: ['C. Quality', 'var(--c)'], D: ['D. Ship', 'var(--d)'] }
+const STATUS = { M9: '⏳ Partly done: personal paths moved to .env (git-ignored); needs your decisions: name, licence, git + GitHub', M0: '✅ Done (contract: canvas/core/model.ts, geometry.ts, measure.ts)', M1: '✅ Done: 66 tests pass; atomic batches, refs, undo/redo, diffs, JSON Canvas round trip', M2: '✅ Done: 16 tests; 60 fps panning 1,000 nodes; clean + sketch modes', M7: '✅ Done: 154 tests; tldraw removed; server owns .board/main.canvas; tabs + disk sync; real Claude run drew a diagram (score 100)', M8: '✅ Done: 16 tests; bun run board check|render|import|layout|new|mcp; PNG via Chrome', M3: '✅ Done: 31 tests; text editing, toolbar, connect, copy/paste, re-parent; 60 fps at 1,000 nodes', M5: '✅ Done: 21 tests; MCP e2e passes; 10 tools + board skill; Mermaid input; benchmark smoke 5/5 at 100', M4: '✅ Done: 14 tests; 6 boards 97–100; ports spread along sides; 60 nodes in 0.7 s', M6: '✅ Done: 11 tests pass; bad fixtures 36/50, good 100; --strict for CI' }
+const M = [
+  ['M0', 'Decisions + spike',             'A', 1, 1,  'File format, layout engine and perf budget written down. A 200-line spike renders 1,000 SVG shapes at 60 fps'],
+  ['M1', 'Data model + op log + undo',    'B', 2, 3,  'JSON Canvas load and save round-trips with no loss. Every change is an op. Undo and redo pass unit tests'],
+  ['M2', 'Renderer, pan/zoom, select',    'A', 2, 5,  'Pan, zoom, select, marquee, move and resize work with mouse and trackpad. 1,000 shapes at 60 fps'],
+  ['M3', 'Shapes, text, arrows',          'A', 6, 9,  'Sticky, rect, ellipse, diamond, text and group shapes. Text editing works. Arrows bind to sides with labels. Hand-drawn mode'],
+  ['M4', 'Layout engine + invariants',    'B', 4, 7,  'dagre and grid layouts, nested groups, elbow routing. The invariant checker returns 0 overlaps on the fixtures'],
+  ['M5', 'Agent API + MCP server',        'B', 8, 10, 'All 7 tools + get_skill work, atomic apply with version check, Mermaid input. SKILL.md with per-type guides. Claude Code draws through MCP from a terminal'],
+  ['M6', 'Benchmark + quality score',     'C', 6, 10, '20 prompts, a scorer, a CI job. tldraw baseline recorded on day 6. The new engine scored daily from day 8'],
+  ['M7', 'Swap into app (parity)',        'D', 11, 12,'The app runs on our canvas. The 3 demo boards pass the launch bar. tldraw removed'],
+  ['M8', 'Interop + export',              'B', 11, 13,'Opens in Obsidian. PNG and SVG export. Boards saved in the repo. CLI: open, render, check (CI exit code), import, mcp'],
+  ['M9', 'Launch prep',                   'D', 13, 15,'Name chosen, personal paths moved to config, Claude Code plugin (skill + MCP + /board), README with GIF, 5 good-first issues, one-command install'],
+]
+const g = document.getElementById('gantt')
+const add = (html, cls, style = '') => { const d = document.createElement('div'); d.className = cls; d.innerHTML = html; d.style.cssText = style; g.append(d); return d }
+add('', 'g-head')
+DAYS.forEach((d, i) => add(d, 'g-head' + ([1, 6, 11].includes(i) ? ' week' : '')))
+M.forEach(([id, name, t, s, e, done], row) => {
+  const r = row + 2
+  add(`<b>${id}</b>${name}`, 'g-label', `grid-row:${r};grid-column:1`)
+  for (let c = 2; c <= 16; c++) add('', 'g-cell', `grid-row:${r};grid-column:${c}`)
+  const bar = add(`<span class="g-tip"><b>${id} ${name}</b><br>${TRACK[t][0]} · ${DAYS[s - 1]} to ${DAYS[e - 1]}<br>Done when: ${done}</span>`, 'g-bar',
+    `grid-row:${r};grid-column:${s + 1} / ${e + 2};background:${TRACK[t][1]}`)
+  bar.tabIndex = 0
+  document.querySelector('#tracker tbody').insertAdjacentHTML('beforeend',
+    `<tr><td>${id}</td><td>${name}</td><td><span class="swatch" style="background:${TRACK[t][1]}"></span>${TRACK[t][0]}</td><td class="num">${DAYS[s - 1]} → ${DAYS[e - 1]}</td><td>${done}</td><td class="status">${STATUS[id] ?? 'Not started'}</td></tr>`)
+})
+</script>
+</body>
+</html>

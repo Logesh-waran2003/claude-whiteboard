@@ -1,0 +1,43 @@
+# Handoff — Agent Board (2026-11-13)
+
+Read this first, then `docs/plan.html` (research, spec, Gantt, tracker).
+
+## What it is
+A local, open-source whiteboard where you and AI agents edit the same board. Agents send a **graph**
+(ops or Mermaid), a layout engine places it, auto-tidy fixes overlaps, and a scorer reports quality on
+every write. Boards are **JSON Canvas** files (Obsidian opens them). Our own canvas (tldraw removed).
+
+## State
+| Milestone | State |
+|---|---|
+| M0 contract `canvas/core/model.ts`, `geometry.ts`, `measure.ts` | ✅ |
+| M1 store + op log + undo `canvas/core/board.ts` | ✅ 66 tests |
+| M2/M3 renderer + canvas UX `canvas/render/**` | ✅ 31 tests, 60 fps at 1,000 nodes |
+| M4 layout + auto-tidy `canvas/layout/**` | ✅ 16 tests; 6/7 fixtures 100, claude-app 92 (4 straight-edge crossings) |
+| M5 agent layer, MCP, skill `canvas/agent/**` | ✅ 23 tests; MCP e2e scores 100 |
+| M6 quality scorer `canvas/quality/**` | ✅ 28 tests |
+| M7 app on our canvas (`server/`, `src/`) | ✅ server owns `.board/main.canvas`; tabs + disk sync; real Claude run works |
+| M8 CLI `canvas/cli/main.ts` | ✅ 16 tests; `bun run board check|render|import|layout|new|mcp` |
+| M9 launch prep | ⏳ paths moved to `.env` (git-ignored). Needs decisions below |
+
+Proof: `bun run test` → 182 pass · `bun run typecheck` clean · `bun canvas/agent/e2e.ts` → score 100.
+
+## Run
+`bun run dev` → http://localhost:5181 (server port 8792; 8787/8790 are used by other local tools).
+Personal read paths live in `.env` (see `.env.example`).
+
+## Decisions waiting on Logesh
+1. ✅ Product name: Agent Board (`agent-board`), chosen 2026-11-13.
+2. Licence (recommended MIT).
+3. ✅ `git init` + first local commit done 2026-11-13. Public push = separate go.
+
+## Known gaps
+- 4 crossings on the claude-app fixture (straight edges are not re-routed only for crossings).
+- Undo history resets when the server restarts or reloads the file.
+- Not verified: real trackpad pinch, system clipboard with other apps, PNG export on Linux.
+- Score uses `approxMeasure` in CLI/server; the browser badge uses exact canvas measure.
+
+## Rules for this repo
+- Only the main thread edits `canvas/core/model.ts` (the shared contract).
+- Every board change goes through ops (`BoardApi.apply`); never mutate `doc`.
+- Check visual quality with a render, not only the score.
