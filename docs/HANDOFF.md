@@ -1,6 +1,6 @@
 # Handoff — Agent Board (2026-11-13)
 
-Read this first, then `docs/plan.html` (research, spec, Gantt, tracker).
+Read `AGENTS.md` (repo rules) and this file, then `docs/plan.html` (research, spec, Gantt, tracker).
 
 ## What it is
 A local, open-source whiteboard where you and AI agents edit the same board. Agents send a **graph**
@@ -21,6 +21,7 @@ every write. Boards are **JSON Canvas** files (Obsidian opens them). Our own can
 | Images (2026-11-13) | ✅ paste/drop on canvas + attach/paste/drop in chat; stored in `.board/assets/<sha256-16>.<ext>`, served at `/assets`; Claude gets chat images as image blocks |
 | Visual boards (2026-11-13) | ✅ `card` shape (title + body + `progress` bar), `row`/`column` layouts (lanes), skill step "pick the picture" + 5-second test, refs `stages` + `timeline`, `snapshot` returns PNG (headless Chrome, `canvas/agent/png.ts`). Real run: status → lanes of cards (100), "where did time go" → timeline (100) |
 | UI (2026-11-13) | ✅ "Back to content" button when no shape is on screen; chat minimise button + floating "Claude" pill, Cmd+\ toggles |
+| UI (2026-11-22) | ✅ Board nav on the left edge (one line per diagram, hover preview, click to zoom); Hide/Show dots toggle in the board bar |
 | M9 launch prep | ⏳ paths moved to `.env` (git-ignored). Needs decisions below |
 
 Proof: `bun run test` → 190 pass · `bun run typecheck` clean · `bun canvas/agent/e2e.ts` → score 100.
@@ -32,7 +33,7 @@ Personal read paths live in `.env` (see `.env.example`).
 ## Decisions waiting on Logesh
 1. ✅ Product name: Agent Board (`agent-board`), chosen 2026-11-13.
 2. Licence (recommended MIT).
-3. ✅ `git init` + first local commit done 2026-11-13. Public push = separate go.
+3. ✅ `git init` + first local commit done 2026-11-13. ✅ Pushed 2026-11-22 to private repo `Logesh-waran2003/claude-whiteboard`. Making it public = separate go.
 
 ## Known gaps
 - 4 crossings on the claude-app fixture (straight edges are not re-routed only for crossings).
