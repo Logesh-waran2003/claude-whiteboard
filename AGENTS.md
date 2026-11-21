@@ -7,7 +7,7 @@ A local whiteboard. You and AI agents edit the same board. The board is one JSON
 (`.board/main.canvas`, git-ignored). Agents send a graph (ops or Mermaid). The layout engine places it.
 The scorer reports quality on every write. A Claude chat panel sits on the right side of the board.
 
-- Repo: `Logesh-waran2003/claude-whiteboard` on GitHub, **private**. Personal account, never a team org.
+- Repo: `Logesh-waran2003/claude-whiteboard` on GitHub, **public** since 2026-11-22. Personal account, never a team org. Public repo: never commit secrets, client data or personal paths.
 - Package manager: **bun** (`bun.lock`). Do not use npm, pnpm or yarn.
 - Owner: Logesh. Product name: Agent Board (`agent-board`).
 

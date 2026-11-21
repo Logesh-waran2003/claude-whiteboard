@@ -33,7 +33,7 @@ Personal read paths live in `.env` (see `.env.example`).
 ## Decisions waiting on Logesh
 1. ✅ Product name: Agent Board (`agent-board`), chosen 2026-11-13.
 2. Licence (recommended MIT).
-3. ✅ `git init` + first local commit done 2026-11-13. ✅ Pushed 2026-11-22 to private repo `Logesh-waran2003/claude-whiteboard`. Making it public = separate go.
+3. ✅ `git init` + first local commit done 2026-11-13. ✅ Pushed 2026-11-22 to private repo `Logesh-waran2003/claude-whiteboard`. ✅ Made public 2026-11-22. Licence still open (recommended MIT).
 
 ## Known gaps
 - 4 crossings on the claude-app fixture (straight edges are not re-routed only for crossings).
