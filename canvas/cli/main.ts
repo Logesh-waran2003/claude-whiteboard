@@ -1,18 +1,17 @@
 // M8. Command-line tool for boards (JSON Canvas files).
 // Usage: bun canvas/cli/main.ts <command> [args]   (run `help` for the list)
 // Exit codes: 0 ok, 1 quality below --min (check), 2 error, 64 usage.
-import { existsSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync, mkdirSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { basename, dirname, extname, join, resolve } from 'node:path'
+import { existsSync, readFileSync, renameSync, writeFileSync, mkdirSync } from 'node:fs'
+import { basename, dirname, extname, resolve } from 'node:path'
 import { createBoard, fromJSON } from '../core/board'
 import { approxMeasure } from '../core/measure'
 import type { CanvasDoc } from '../core/model'
 import { AgentSession } from '../agent/session'
 import { toSVG } from '../agent/export-svg'
+import { svgToPng } from '../agent/png'
 import { type DetailedReport, scoreDetailed } from '../quality/score'
 
 const MCP_SERVER = resolve(import.meta.dir, '../agent/mcp-stdio.ts')
-const CHROME_MAC = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 
 const USAGE = `Usage: bun canvas/cli/main.ts <command> [args]
 
@@ -156,37 +155,7 @@ function cmdCheck(p: Parsed): number {
 
 // ---------------------------------------------------------------- render
 
-function findChrome(): string | undefined {
-  if (process.platform === 'darwin' && existsSync(CHROME_MAC)) return CHROME_MAC
-  return Bun.which('google-chrome') ?? Bun.which('chromium') ?? undefined
-}
-
-function writePng(svg: string, out: string) {
-  const chrome = findChrome()
-  if (!chrome) throw new Fail('PNG needs Chrome; use -o out.svg (or install Google Chrome for PNG)')
-  const size = svg.match(/<svg[^>]*\swidth="([\d.]+)" height="([\d.]+)"/)
-  if (!size) throw new Fail('render: could not read the SVG width and height')
-  const [w, h] = [Math.ceil(Number(size[1])), Math.ceil(Number(size[2]))]
-  const dir = mkdtempSync(join(tmpdir(), 'cw-png-'))
-  try {
-    const svgPath = join(dir, 'board.svg')
-    writeFileSync(svgPath, svg)
-    rmSync(out, { force: true })
-    // A private profile keeps headless Chrome from handing off to a Chrome the user already has open.
-    const r = Bun.spawnSync(
-      [chrome, '--headless=new', `--user-data-dir=${join(dir, 'profile')}`, `--screenshot=${out}`, `--window-size=${w},${h}`, '--hide-scrollbars', `file://${svgPath}`],
-      { stdout: 'pipe', stderr: 'pipe', timeout: 60_000 },
-    )
-    if (r.exitCode !== 0 || !existsSync(out)) {
-      const last = r.stderr.toString().trim().split('\n').pop() ?? ''
-      throw new Fail(`Chrome did not write ${out} (exit ${r.exitCode}). ${last}`.trim())
-    }
-  } finally {
-    rmSync(dir, { recursive: true, force: true })
-  }
-}
-
-function cmdRender(p: Parsed): number {
+async function cmdRender(p: Parsed): Promise<number> {
   const [file] = p.pos
   if (!file) throw usage('render needs a .canvas file. Example: render board.canvas -o board.png')
   const out = resolve(strFlag(p, 'o') ?? file.replace(/\.canvas$/, '') + '.svg')
@@ -194,7 +163,12 @@ function cmdRender(p: Parsed): number {
   if (ext !== '.svg' && ext !== '.png') throw usage(`render output must end in .svg or .png, got ${out}`)
   const svg = toSVG(loadDoc(file), approxMeasure, { padding: numFlag(p, 'padding', 24) })
   if (ext === '.svg') writeFileSync(out, svg)
-  else writePng(svg, out)
+  else {
+    const png = await svgToPng(svg).catch((e: Error) => {
+      throw new Fail(`render: ${e.message}`)
+    })
+    writeFileSync(out, png)
+  }
   console.log(`wrote ${out}`)
   return 0
 }

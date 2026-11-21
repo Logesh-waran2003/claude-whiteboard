@@ -10,9 +10,10 @@ export type Point = { x: number; y: number }
 export type Rect = { x: number; y: number; width: number; height: number }
 
 /** Visual shape of a node. JSON Canvas `type` stays text/file/link/group; we add the look. */
-export type ShapeKind = 'rect' | 'ellipse' | 'diamond' | 'sticky' | 'text'
+export type ShapeKind = 'rect' | 'ellipse' | 'diamond' | 'sticky' | 'text' | 'card'
 /** How a group (or the root, id "root") arranges its direct children. */
-export type LayoutKind = 'dag-lr' | 'dag-tb' | 'grid' | 'free'
+/** row / column: children in one line, in z-order (lanes, stacks). */
+export type LayoutKind = 'dag-lr' | 'dag-tb' | 'grid' | 'free' | 'row' | 'column'
 
 export type NodeBase = Rect & {
   id: string
@@ -27,6 +28,8 @@ export type NodeBase = Rect & {
   'x-role'?: string
   /** false = not placed yet; the layout engine positions it. Absent = placed. */
   'x-placed'?: boolean
+  /** 0..100: a progress bar (card shape). */
+  'x-progress'?: number
   [extra: `x-${string}`]: unknown
 }
 
@@ -88,6 +91,7 @@ export type NodeFields = {
   role?: string
   pin?: boolean
   layout?: LayoutKind // groups only
+  progress?: number // 0..100, shown as a bar on "card" shapes; null on update removes it
 }
 
 export type Op =

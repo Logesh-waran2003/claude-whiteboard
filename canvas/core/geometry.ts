@@ -152,6 +152,9 @@ export function segmentHitsRect(a: Point, b: Point, r: Rect, inset = 2): boolean
 }
 
 /** Text shown inside a node (group label is drawn separately). */
+/** A file node that shows an image (rendered as the picture, sized by the user, not by its text). */
+export const isImageNode = (n: CanvasNode) => n.type === 'file' && /\.(png|jpe?g|gif|webp|svg)$/i.test(n.file)
+
 export function nodeText(n: CanvasNode): string {
   if (n.type === 'text') return n.text
   if (n.type === 'file') return n.file.split('/').pop() ?? n.file

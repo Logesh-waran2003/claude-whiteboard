@@ -236,10 +236,15 @@ export function scoreDetailed(doc: CanvasDoc, measure: Measure): DetailedReport 
   // A label, or a node in another group, that crosses a group border. Contained items never reach this check.
   // A node crossing its own x-parent border is left to outsideGroup, so it is penalised once.
   const borderItems: TextBox[] = [...doc.nodes.map((n) => ({ id: n.id, rect: n })), ...edgeLabels]
+  // True when `id` is nested (at any depth) in group `ancestor`: an outer group always overlaps its inner groups.
+  const inside = (id: string, ancestor: string) => {
+    for (let p = byId.get(id)?.['x-parent'], seen = 0; p && seen < 64; p = byId.get(p)?.['x-parent'], seen++) if (p === ancestor) return true
+    return false
+  }
   const labelOnBorder = new Set<string>()
   for (const g of groups) {
     for (const item of borderItems) {
-      if (item.id === g.id || byId.get(item.id)?.['x-parent'] === g.id) continue
+      if (item.id === g.id || byId.get(item.id)?.['x-parent'] === g.id || inside(g.id, item.id)) continue
       if (intersects(item.rect, g) && !contains(g, item.rect)) labelOnBorder.add(item.id)
     }
   }

@@ -8,6 +8,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { fromJSON } from '../core/board'
 import { approxMeasure } from '../core/measure'
 import { AgentSession } from './session'
+import { svgToPng } from './png'
 import { createTools } from './tools'
 
 function arg(name: string): string | undefined {
@@ -57,13 +58,14 @@ const server = new McpServer(
   },
 )
 
-for (const tool of createTools({ session, agent })) {
+for (const tool of createTools({ session, agent, png: (svg) => svgToPng(svg, { maxSide: 1600 }) })) {
   server.registerTool(tool.name, { description: tool.description, inputSchema: tool.inputSchema }, async (args: unknown) => {
     syncFromDisk()
     const before = session.version
     const r = await tool.run(args ?? {})
     if (session.version !== before) save()
-    return { content: [{ type: 'text' as const, text: r.text }], ...(r.isError ? { isError: true } : {}) }
+    const image = r.image ? [{ type: 'image' as const, data: r.image, mimeType: 'image/png' }] : []
+    return { content: [{ type: 'text' as const, text: r.text }, ...image], ...(r.isError ? { isError: true } : {}) }
   })
 }
 

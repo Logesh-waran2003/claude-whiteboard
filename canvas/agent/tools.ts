@@ -5,7 +5,7 @@ import { z } from 'zod'
 import type { Op } from '../core/model'
 import type { AgentSession } from './session'
 
-export const REFERENCES = ['architecture', 'flow', 'sequence', 'er', 'stickies', 'matrix'] as const
+export const REFERENCES = ['architecture', 'flow', 'sequence', 'er', 'stickies', 'matrix', 'stages', 'timeline'] as const
 
 export type ToolContext = {
   session: AgentSession
@@ -13,9 +13,11 @@ export type ToolContext = {
   agent: string
   /** Moves the user's camera to these ids. Absent in stdio mode. */
   onFocus?: (ids: string[]) => void | Promise<void>
+  /** SVG -> PNG. When set, snapshot returns a picture the model can look at. */
+  png?: (svg: string) => Promise<Uint8Array>
 }
 
-export type ToolResult = { text: string; isError?: boolean }
+export type ToolResult = { text: string; isError?: boolean; /** base64 PNG shown to the model */ image?: string }
 
 export type ToolDef = {
   name: string
@@ -24,7 +26,7 @@ export type ToolDef = {
   run: (args: any) => ToolResult | Promise<ToolResult>
 }
 
-const LAYOUTS = z.enum(['dag-lr', 'dag-tb', 'grid', 'free'])
+const LAYOUTS = z.enum(['dag-lr', 'dag-tb', 'grid', 'free', 'row', 'column'])
 
 const json = (v: unknown, isError = false): ToolResult => ({ text: JSON.stringify(v, null, 1), isError })
 const write = (r: { ok: boolean }) => json(r, !r.ok)
@@ -35,12 +37,13 @@ export function readSkill(name?: string): string {
 }
 
 const OPS_HELP = `Op shapes (ids or same-batch refs work anywhere an id is expected):
-{"op":"add_node","ref":"a","text":"Auth","kind":"rect|ellipse|diamond|sticky|text|group","parent":"<group>","role":"service"}
+{"op":"add_node","ref":"a","text":"Auth","kind":"rect|ellipse|diamond|sticky|text|card|group","parent":"<group>","role":"service"}
+{"op":"add_node","kind":"card","text":"Title\nshort body line","color":"4","progress":70,"parent":"<lane>"}   (card: first line = bold title; progress 0-100 = bar)
 {"op":"add_edge","from":"a","to":"b","label":"calls","arrow":"end|none|both","route":"straight|elbow"}
 {"op":"update","id":"n1","text":"New name","parent":"g2"}   (parent "" = take out of its group)
 {"op":"update_edge","id":"e1","label":"reads"}
 {"op":"move","ids":["n1"],"dx":0,"dy":120}  {"op":"remove","ids":["n1","e2"]}
-{"op":"set_layout","group":"g1|root","layout":"dag-lr|dag-tb|grid|free"}  {"op":"reorder","id":"n1","to":"front|back"}
+{"op":"set_layout","group":"g1|root","layout":"dag-lr|dag-tb|grid|free|row|column"}   (row/column: children in one line, in add order — lanes)  {"op":"reorder","id":"n1","to":"front|back"}
 Omit x/y/width/height: the engine places and sizes new nodes.`
 
 export function createTools(ctx: ToolContext): ToolDef[] {
@@ -49,7 +52,7 @@ export function createTools(ctx: ToolContext): ToolDef[] {
     {
       name: 'get_skill',
       description:
-        'Returns the board skill: how to draw reliable diagrams with these tools. Call it once before your first board call. Pass name to get one diagram-type reference (architecture, flow, sequence, er, stickies, matrix).',
+        'Returns the board skill: how to draw reliable diagrams with these tools. Call it once before your first board call. Pass name to get one diagram-type reference (architecture, flow, sequence, er, stickies, matrix, stages, timeline).',
       inputSchema: { name: z.enum(REFERENCES).optional().describe('Reference to load; omit for the main skill') },
       run: ({ name }) => ({ text: readSkill(name) }),
     },
@@ -114,9 +117,18 @@ export function createTools(ctx: ToolContext): ToolDef[] {
     {
       name: 'snapshot',
       description:
-        'Render the board (or only some ids; groups include their children) as SVG text. Use it when you can read images or want to check the picture; for structure, read_board is cheaper.',
-      inputSchema: { ids: z.array(z.string()).optional(), padding: z.number().optional() },
-      run: ({ ids, padding }) => ({ text: session.snapshot({ ids, padding }) }),
+        'Render the board (or only some ids; groups include their children) as a picture (PNG) you can look at. Use it to judge your drawing like a human would (the 5-second test in the skill). format "svg" returns SVG text instead.',
+      inputSchema: { ids: z.array(z.string()).optional(), padding: z.number().optional(), format: z.enum(['png', 'svg']).optional() },
+      run: async ({ ids, padding, format }) => {
+        const svg = session.snapshot({ ids, padding })
+        if (format === 'svg' || !ctx.png) return { text: svg }
+        try {
+          const png = await ctx.png(svg)
+          return { text: 'Snapshot of the board (PNG).', image: Buffer.from(png).toString('base64') }
+        } catch (e) {
+          return { text: `PNG failed (${(e as Error).message}); SVG instead:\n${svg}` }
+        }
+      },
     },
     {
       name: 'undo',

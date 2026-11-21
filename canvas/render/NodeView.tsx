@@ -1,7 +1,8 @@
 // One node, drawn in local coordinates and placed with translate(x, y), so a move only changes
 // the transform and the (possibly rough) shape is reused. Memoised by node identity.
 import { memo, useMemo } from 'react'
-import { nodeText } from '../core/geometry'
+import { CARD, cardBox } from '../core/card'
+import { isImageNode, nodeText } from '../core/geometry'
 import { type CanvasNode, type Measure, type ShapeKind, TYPE } from '../core/model'
 import {
   ACCENT,
@@ -109,7 +110,17 @@ export const NodeView = memo(function NodeView({ node, measure, mode, editing }:
       </g>
     )
   }
+  if (node.type === 'file' && isImageNode(node)) {
+    // The path is relative to the board file; the app serves the board folder's assets at /assets.
+    return (
+      <g transform={`translate(${node.x} ${node.y})`} data-id={id}>
+        <rect width={w} height={h} rx={4} fill="#fff" stroke="#d0d7de" strokeWidth={1} />
+        <image href={`/${node.file.replace(/^\/+/, '')}`} width={w} height={h} preserveAspectRatio="xMidYMid meet" />
+      </g>
+    )
+  }
   const kind = node['x-shape'] ?? 'rect'
+  if (kind === 'card') return <CardView node={node} measure={measure} editing={editing} />
   const stroke = strokeOf(node.color)
   const fill = kind === 'sticky' ? (node.color ? fillOf(node.color, 0.3) : STICKY_FILL) : fillOf(node.color)
   return (
@@ -124,4 +135,52 @@ export const NodeView = memo(function NodeView({ node, measure, mode, editing }:
 const NodeText = memo(function NodeText({ text, w, h, measure, color }: { text: string; w: number; h: number; measure: Measure; color: string }) {
   const lines = useMemo(() => wrapText(text, measure, TYPE.nodeFontSize, Math.max(1, w - TYPE.nodePadding * 2)), [text, w, measure])
   return <TextLines lines={lines} w={w} h={h} fontSize={TYPE.nodeFontSize} color={color} />
+})
+
+/** Card: colour stripe, bold title, muted body lines, optional progress bar with its percent. */
+const CardView = memo(function CardView({ node, measure, editing }: { node: CanvasNode; measure: Measure; editing?: boolean }) {
+  const { id, width: w, height: h } = node
+  const progress = typeof node['x-progress'] === 'number' ? node['x-progress'] : undefined
+  const box = useMemo(() => cardBox(nodeText(node), w, measure, progress), [node, w, measure, progress])
+  const accent = node.color ? strokeOf(node.color) : '#8c959f'
+  const x = CARD.padding + CARD.stripe
+  const line = (fs: number) => fs * TYPE.lineHeight
+  const clip = `card-${id}`
+  return (
+    <g transform={`translate(${node.x} ${node.y})`} data-id={id}>
+      <clipPath id={clip}>
+        <rect width={w} height={h} rx={10} />
+      </clipPath>
+      <rect x={1} y={2} width={w} height={h} rx={10} fill="rgba(0,0,0,0.05)" />
+      <rect width={w} height={h} rx={10} fill="#fff" stroke="#d0d7de" strokeWidth={1} />
+      <rect width={CARD.stripe} height={h} fill={accent} clipPath={`url(#${clip})`} />
+      {!editing && (
+        <>
+          <text x={x} fontSize={CARD.titleSize} fontWeight={600} fill={INK} dominantBaseline="central">
+            {box.title.map((l, i) => (
+              <tspan key={i} x={x} y={box.titleY + (i + 0.5) * line(CARD.titleSize)}>
+                {l}
+              </tspan>
+            ))}
+          </text>
+          <text x={x} fontSize={CARD.bodySize} fill={MUTED} dominantBaseline="central">
+            {box.body.map((l, i) => (
+              <tspan key={i} x={x} y={box.bodyY + (i + 0.5) * line(CARD.bodySize)}>
+                {l}
+              </tspan>
+            ))}
+          </text>
+        </>
+      )}
+      {progress !== undefined && (
+        <>
+          <rect x={x} y={box.barY} width={w - x - CARD.padding} height={CARD.bar} rx={CARD.bar / 2} fill="#eaeef2" />
+          <rect x={x} y={box.barY} width={((w - x - CARD.padding) * progress) / 100} height={CARD.bar} rx={CARD.bar / 2} fill={accent} />
+          <text x={x} y={box.barY + CARD.bar + line(CARD.bodySize) / 2 + 2} fontSize={12} fill={MUTED} dominantBaseline="central">
+            {Math.round(progress)}%
+          </text>
+        </>
+      )}
+    </g>
+  )
 })

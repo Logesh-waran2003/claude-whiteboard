@@ -2,7 +2,7 @@
 // clipboard. It never mutates the doc; every user change is an op sent through board.apply, so user
 // and agent share one undo stack.
 import { type Ref, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { contains, nodeText, pointAt, sidePoint } from '../core/geometry'
+import { contains, intersects, nodeText, pointAt, sidePoint } from '../core/geometry'
 import { type BoardApi, type CanvasDoc, type CanvasNode, type Measure, type Op, type Point, type Rect, type Side, TYPE } from '../core/model'
 import { type Camera, type Size, type Viewport, panBy, fitCamera, lerpCamera, rectToScreen, toScreen, toWorld, viewportOf, wheelZoomFactor, zoomAt } from './camera'
 import { EdgeView } from './EdgeView'
@@ -18,6 +18,7 @@ import {
   groupAt,
   handlePoint,
   hitTest,
+  MIN_SIZE,
   marqueeSelect,
   movingSet,
   moveRoots,
@@ -25,7 +26,7 @@ import {
   previewDoc,
   resizeRect,
 } from './scene'
-import { ACCENT, FONT, PAPER, groupFill } from './style'
+import { ACCENT, FONT, INK, PAPER, groupFill } from './style'
 import { type EditorBox, TextEditor } from './TextEditor'
 import { TOOL_KEYS, Toolbar } from './Toolbar'
 
@@ -43,7 +44,11 @@ export type BoardViewProps = {
   onSelectionChange?: (ids: string[]) => void
   onViewportChange?: (vp: Viewport) => void
   handleRef?: Ref<BoardViewHandle>
+  /** Store a pasted or dropped image; returns its file path (e.g. "assets/x.png"). No prop = no image paste. */
+  uploadImage?: (file: File) => Promise<string>
 }
+
+const IMAGE_MAX = 480 // world px, longest side of a new image node
 
 type Preview = { moved: Set<string>; dx: number; dy: number; resized?: { id: string; rect: Rect } }
 type Gesture =
@@ -74,7 +79,7 @@ const sameIds = (a: string[], b: string[]) => a.length === b.length && a.every((
 /** Connect handle centres (screen px), just outside each side midpoint. */
 const sideHandles = (r: Rect) => SIDES.map((side) => ({ side, p: { x: sidePoint(r, side).x + OUT[side].x * SIDE_HANDLE_GAP, y: sidePoint(r, side).y + OUT[side].y * SIDE_HANDLE_GAP } }))
 
-export function BoardView({ board, measure, mode = 'clean', actor = 'user', onSelectionChange, onViewportChange, handleRef }: BoardViewProps) {
+export function BoardView({ board, measure, mode = 'clean', actor = 'user', onSelectionChange, onViewportChange, handleRef, uploadImage }: BoardViewProps) {
   const doc = useSyncExternalStore(
     useCallback((cb: () => void) => board.subscribe(() => cb()), [board]),
     () => board.doc,
@@ -188,7 +193,10 @@ export function BoardView({ board, measure, mode = 'clean', actor = 'user', onSe
       setSize({ width, height })
       if (!fitted.current && width) {
         fitted.current = true
-        zoomToFit(undefined, false)
+        // Open on the newest diagram (last top-level group), not the whole board:
+        // fitting every diagram at once shrinks text to ~2px and nothing is readable.
+        const newest = board.doc.nodes.findLast((n) => n.type === 'group' && !n['x-parent'])
+        zoomToFit(newest ? [newest.id] : undefined, false)
       }
     })
     ro.observe(el)
@@ -280,6 +288,31 @@ export function BoardView({ board, measure, mode = 'clean', actor = 'user', onSe
     if (res.ok) setSelection(refs.map((r) => res.ids[r]).filter(Boolean))
   }
 
+  /** Upload images and add one node each, centred at `at` (world) or the viewport centre, side by side. */
+  const addImages = async (files: File[], at?: Point) => {
+    const imgs = files.filter((f) => f.type.startsWith('image/'))
+    if (!uploadImage || !imgs.length) return
+    const r = svgRef.current!.getBoundingClientRect()
+    let c = at ?? toWorld(camRef.current, { x: r.width / 2, y: r.height / 2 })
+    const ops: Op[] = []
+    for (const [i, f] of imgs.entries()) {
+      try {
+        const [file, bmp] = await Promise.all([uploadImage(f), createImageBitmap(f)])
+        const k = Math.min(1, IMAGE_MAX / Math.max(bmp.width, bmp.height))
+        const width = Math.max(MIN_SIZE.width, Math.round(bmp.width * k))
+        const height = Math.max(MIN_SIZE.height, Math.round(bmp.height * k))
+        bmp.close()
+        ops.push({ op: 'add_node', ref: `img${i}`, file, x: Math.round(c.x - width / 2), y: Math.round(c.y - height / 2), width, height })
+        c = { x: c.x + width + GRID, y: c.y }
+      } catch (e) {
+        console.error('image upload failed:', e)
+      }
+    }
+    if (!ops.length) return
+    const res = apply(ops)
+    if (res.ok) setSelection(ops.map((_, i) => res.ids[`img${i}`]).filter(Boolean))
+  }
+
   const duplicate = () => {
     const payload = copyPayload(board.doc, selRef.current)
     if (!payload.nodes.length) return
@@ -304,7 +337,9 @@ export function BoardView({ board, measure, mode = 'clean', actor = 'user', onSe
       clearTimeout(pendingPaste.current)
       pendingPaste.current = 0
       e.preventDefault()
-      doPaste(e.clipboardData?.getData('text/plain'))
+      const files = [...(e.clipboardData?.files ?? [])]
+      if (files.some((f) => f.type.startsWith('image/'))) void addImages(files)
+      else doPaste(e.clipboardData?.getData('text/plain'))
     }
     document.addEventListener('copy', onCopy)
     document.addEventListener('paste', onPaste)
@@ -618,6 +653,9 @@ export function BoardView({ board, measure, mode = 'clean', actor = 'user', onSe
     )
   }, [area, scene, measure, mode, editId])
 
+  // Nothing on screen but the board has shapes: offer a way back.
+  const lost = size.width > 0 && doc.nodes.length > 0 && !doc.nodes.some((n) => intersects(n, view))
+
   let gap = GRID * cam.zoom
   while (gap < 12) gap *= 4
   const ox = (((-cam.x * cam.zoom) % gap) + gap) % gap
@@ -633,7 +671,8 @@ export function BoardView({ board, measure, mode = 'clean', actor = 'user', onSe
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden' }}>
       <style>{`.wb-board{outline:none}.wb-board:focus-visible{outline:2px solid ${ACCENT};outline-offset:-2px}.wb-board *{pointer-events:none}
-.wb-tool[aria-pressed=false]:hover{background:#eef0f2 !important;color:#1f2328 !important}.wb-tool:focus-visible{box-shadow:0 0 0 2px ${ACCENT}}`}</style>
+.wb-tool[aria-pressed=false]:hover{background:#eef0f2 !important;color:#1f2328 !important}.wb-tool:focus-visible{box-shadow:0 0 0 2px ${ACCENT}}
+.wb-back:hover{border-color:${ACCENT} !important;color:${ACCENT} !important}.wb-back:focus-visible{outline:2px solid ${ACCENT};outline-offset:2px}`}</style>
       <svg
         ref={svgRef}
         className="wb-board"
@@ -652,13 +691,21 @@ export function BoardView({ board, measure, mode = 'clean', actor = 'user', onSe
         onKeyDown={onKeyDown}
         onKeyUp={onKeyUp}
         onBlur={() => (space.current = false)}
+        onDragOver={(e) => uploadImage && e.dataTransfer.types.includes('Files') && e.preventDefault()}
+        onDrop={(e) => {
+          const files = [...e.dataTransfer.files]
+          if (!uploadImage || !files.length) return
+          e.preventDefault()
+          svgRef.current?.focus()
+          void addImages(files, toWorld(camRef.current, local(e)))
+        }}
       >
         <defs>
           <pattern id="wb-dots" patternUnits="userSpaceOnUse" width={gap} height={gap} x={ox} y={oy}>
             <circle cx={1} cy={1} r={1} fill="#c9ced6" />
           </pattern>
         </defs>
-        <rect width="100%" height="100%" fill="url(#wb-dots)" />
+        <rect className="wb-dots" width="100%" height="100%" fill="url(#wb-dots)" />
         <g transform={`scale(${cam.zoom}) translate(${-cam.x} ${-cam.y})`}>{world}</g>
         {/* overlay in screen space: 1px lines and 8px handles at every zoom */}
         <g fill="none" stroke={ACCENT} strokeWidth={1}>
@@ -688,6 +735,40 @@ export function BoardView({ board, measure, mode = 'clean', actor = 'user', onSe
         </g>
       </svg>
       {editing && <Editor key={editing.id} editing={editing} scene={scene} cam={cam} measure={measure} onDone={(t) => finishEditing(editing, t)} />}
+      {lost && (
+        <button
+          type="button"
+          className="wb-back"
+          onClick={() => {
+            zoomToFit()
+            focusBoard()
+          }}
+          title="Show all shapes (Shift+1)"
+          style={{
+            position: 'absolute',
+            left: '50%',
+            bottom: 76,
+            transform: 'translateX(-50%)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '8px 14px',
+            border: '1px solid #d0d7de',
+            borderRadius: 999,
+            background: '#fff',
+            color: INK,
+            font: `500 13px ${FONT}`,
+            boxShadow: '0 2px 8px rgba(31,35,40,0.12)',
+            cursor: 'pointer',
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4" />
+            <circle cx="8" cy="8" r="2" />
+          </svg>
+          Back to content
+        </button>
+      )}
       <Toolbar
         tool={tool}
         onPick={(t) => {

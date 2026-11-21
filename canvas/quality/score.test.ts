@@ -229,3 +229,17 @@ describe('score: new fixtures', () => {
     expect(r.score).toBe(90)
   })
 })
+
+describe('nested groups', () => {
+  test('an outer group is not "on the border" of a group nested inside it', () => {
+    const doc: CanvasDoc = {
+      nodes: [
+        { id: 'outer', type: 'group', label: 'Outer', x: 0, y: 0, width: 600, height: 400 },
+        { id: 'inner', type: 'group', label: 'Inner', x: 40, y: 68, width: 300, height: 300, 'x-parent': 'outer' },
+        { id: 'deep', type: 'group', label: 'Deep', x: 80, y: 136, width: 200, height: 200, 'x-parent': 'inner' },
+      ],
+      edges: [],
+    }
+    expect(scoreDetailed(doc, approxMeasure).labelOnBorder).toEqual([])
+  })
+})

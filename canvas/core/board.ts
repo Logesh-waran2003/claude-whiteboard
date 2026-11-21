@@ -11,15 +11,16 @@ import {
   type CanvasNode,
   type Op,
 } from './model'
+import { CARD } from './card'
 
 const HISTORY_LIMIT = 500
-const SHAPES = ['rect', 'ellipse', 'diamond', 'sticky', 'text']
+const SHAPES = ['rect', 'ellipse', 'diamond', 'sticky', 'text', 'card']
 const KINDS = [...SHAPES, 'group']
-const LAYOUTS = ['dag-lr', 'dag-tb', 'grid', 'free']
+const LAYOUTS = ['dag-lr', 'dag-tb', 'grid', 'free', 'row', 'column']
 const SIDES = ['top', 'right', 'bottom', 'left']
 const ROUTES = ['straight', 'elbow']
 const ARROWS = ['none', 'end', 'both']
-const NODE_FIELDS = ['kind', 'text', 'file', 'url', 'x', 'y', 'width', 'height', 'color', 'parent', 'role', 'pin', 'layout']
+const NODE_FIELDS = ['kind', 'text', 'file', 'url', 'x', 'y', 'width', 'height', 'color', 'parent', 'role', 'pin', 'layout', 'progress']
 const ALLOWED: Record<Op['op'], string[]> = {
   add_node: ['ref', 'id', ...NODE_FIELDS],
   add_edge: ['ref', 'id', 'from', 'to', 'label', 'fromSide', 'toSide', 'color', 'route', 'arrow'],
@@ -65,6 +66,13 @@ function str(op: Loose, f: string): string | undefined {
   const v = op[f]
   if (v !== undefined && typeof v !== 'string') fail(f, `${f} ${show(v)} is not valid; use a string`)
   return v as string | undefined
+}
+/** 0..100, or null (= remove). */
+function percent(op: Loose, f: string): number | null | undefined {
+  if (op[f] === null) return null
+  const v = num(op, f)
+  if (v !== undefined && (v < 0 || v > 100)) fail(f, `${f} ${v} is not valid; use a number from 0 to 100`)
+  return v
 }
 function bool(op: Loose, f: string): boolean | undefined {
   const v = op[f]
@@ -196,6 +204,8 @@ class Draft {
     const role = str(op, 'role')
     const pin = bool(op, 'pin')
     const layout = oneOf(op, 'layout', LAYOUTS)
+    const progress = percent(op, 'progress')
+    if (kind === 'group' && progress != null) fail('progress', 'progress is not valid for kind "group"; use it on a card')
     if (file !== undefined && url !== undefined) fail('url', 'give file or url, not both')
     if (kind === 'group' && file !== undefined) fail('file', 'file is not valid for kind "group"; use it on a non-group node')
     if (kind === 'group' && url !== undefined) fail('url', 'url is not valid for kind "group"; use it on a non-group node')
@@ -203,7 +213,7 @@ class Draft {
     const parent = op.parent !== undefined ? this.groupId('parent', op.parent) : undefined
     const id = this.newId(op)
 
-    const def = kind === 'sticky' ? TYPE.sticky : TYPE.minNode
+    const def = kind === 'sticky' ? TYPE.sticky : kind === 'card' ? { width: CARD.width, height: TYPE.minNode.height } : TYPE.minNode
     const node: Loose = { id }
     if (kind === 'group') {
       node.type = 'group'
@@ -219,6 +229,7 @@ class Draft {
     if (parent !== undefined) node['x-parent'] = parent
     if (role !== undefined) node['x-role'] = role
     if (pin !== undefined) node['x-pin'] = pin
+    if (progress != null) node['x-progress'] = progress
     if (x === undefined && y === undefined) node['x-placed'] = false
 
     if (kind === 'group') {
@@ -295,6 +306,12 @@ class Draft {
     if (role !== undefined) next['x-role'] = role
     const pin = bool(op, 'pin')
     if (pin !== undefined) next['x-pin'] = pin
+    const progress = percent(op, 'progress')
+    if (progress !== undefined) {
+      if (isGroup) fail('progress', 'progress is not valid on groups; use it on a card')
+      if (progress === null) delete next['x-progress']
+      else next['x-progress'] = progress
+    }
     const layout = oneOf(op, 'layout', LAYOUTS)
     if (layout !== undefined) {
       if (!isGroup) fail('layout', 'layout is only valid on groups')

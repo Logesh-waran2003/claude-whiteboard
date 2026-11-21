@@ -1,4 +1,5 @@
 // M4 layout engine. Pure: doc in, ops out (update / move / update_edge only).
+import { isImageNode } from '../core/geometry'
 import type { CanvasDoc, CanvasNode, Measure, Op, Point, Rect } from '../core/model'
 import { enforce } from './invariants'
 import { layoutContainer } from './place'
@@ -15,7 +16,7 @@ export function layoutBoard(doc: CanvasDoc, measure: Measure, opts: { scope?: st
   const changed = new Set<string>()
   for (const n of w.doc.nodes) {
     if (n.type === 'group' || isFixed(n) || !inScope.has(n.id) || (isPlaced(n) && !all)) continue
-    Object.assign(n, sizeFor(n, measure))
+    if (!isImageNode(n) || !n.width || !n.height) Object.assign(n, sizeFor(n, measure)) // images keep their size
     changed.add(n.id)
   }
   const containers = postOrderGroups(w, scope)

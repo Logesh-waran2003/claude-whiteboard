@@ -1,7 +1,7 @@
 // Local server: owns the board file and runs Claude (Agent SDK, uses your Claude Code login).
 // One Board + one AgentSession live here. Browsers keep a replica and send user ops over /ws;
 // Claude changes the board through in-process board tools (canvas/agent/tools.ts).
-import { type McpServerConfig, createSdkMcpServer, query, tool } from '@anthropic-ai/claude-agent-sdk'
+import { type McpServerConfig, type SDKUserMessage, createSdkMcpServer, query, tool } from '@anthropic-ai/claude-agent-sdk'
 import type { ServerWebSocket } from 'bun'
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
@@ -12,7 +12,8 @@ import { approxMeasure } from '../canvas/core/measure'
 import type { CanvasDoc, Op } from '../canvas/core/model'
 import { enforceInvariants } from '../canvas/layout/index'
 import { AgentSession } from '../canvas/agent/session'
-import { createTools } from '../canvas/agent/tools'
+import { svgToPng } from '../canvas/agent/png'
+import { type ToolResult, createTools } from '../canvas/agent/tools'
 
 const HOME = homedir()
 // What Claude may read (read-only). Set in .env (git-ignored); see .env.example.
@@ -22,8 +23,13 @@ const VAULT = process.env.WB_NOTES_DIR ? expand(process.env.WB_NOTES_DIR) : unde
 
 const PORT = Number(process.env.PORT ?? 8792)
 const MODEL = process.env.WB_MODEL ?? 'claude-opus-5-5'
-const EFFORT = (process.env.WB_EFFORT ?? 'low') as 'low' | 'medium' | 'high'
+const EFFORT = (process.env.WB_EFFORT ?? 'high') as 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 const FILE = resolve(process.env.WB_BOARD ?? `${import.meta.dir}/../.board/main.canvas`)
+// Pasted images (board and chat) live next to the board file; image nodes store "assets/<name>".
+const BOARD_DIR = dirname(FILE)
+const ASSETS = `${BOARD_DIR}/assets`
+const IMAGE_TYPES: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp' }
+const MAX_IMAGE = 10 * 1024 * 1024
 
 const SYSTEM = `You work alongside the user on a shared whiteboard (a JSON Canvas board). The user edits the same board at the same time.
 
@@ -33,6 +39,7 @@ Never delete or move the user's shapes unless they ask. When the user says "this
 You can READ the user's work to ground your drawings (never invent architecture):
 - Code: ${PROJECTS}. Use Glob/Grep/Read; start with README, package.json, docs.${VAULT ? `\n- Notes: ${VAULT} (markdown notes, plans).` : ''}
 - gbrain (the user's knowledge base): mcp__gbrain__query / search / get_page, if available.
+- Images on the board are file nodes ("assets/<name>"), stored in ${BOARD_DIR}. Read the file to see one.
 Read only what you need (a few files), then draw. If facts are missing, draw what you found and mark gaps with a grey "?" note.
 
 Keep chat replies short: say what you changed in one or two lines.`
@@ -144,11 +151,15 @@ let lastUserWs: Ws | null = null
 let running: { abort: AbortController; ws: Ws } | null = null
 const send = (ws: Ws | undefined, msg: unknown) => ws?.send(JSON.stringify(msg))
 
-const asResult = (r: { text: string; isError?: boolean }) => ({ content: [{ type: 'text' as const, text: r.text }], ...(r.isError ? { isError: true } : {}) })
+const asResult = (r: ToolResult) => ({
+  content: [{ type: 'text' as const, text: r.text }, ...(r.image ? [{ type: 'image' as const, data: r.image, mimeType: 'image/png' }] : [])],
+  ...(r.isError ? { isError: true } : {}),
+})
 
 const TOOLS = createTools({
   session,
   agent: 'claude',
+  png: (svg) => svgToPng(svg, { maxSide: 1600 }),
   onFocus: (ids) => {
     send(running?.ws, { type: 'focus', ids })
   },
@@ -192,7 +203,29 @@ async function gbrainServer(): Promise<Record<string, McpServerConfig>> {
 const GBRAIN = await gbrainServer()
 
 type Viewport = { x: number; y: number; width: number; height: number }
-type ChatMsg = { type: 'chat'; text: string; sessionId?: string; viewport?: Viewport; selected?: string[] }
+type ChatMsg = { type: 'chat'; text: string; sessionId?: string; viewport?: Viewport; selected?: string[]; images?: string[] }
+
+/** "assets/<name>" -> absolute path, or undefined if it is not a stored asset. */
+function assetPath(p: string): string | undefined {
+  const name = basename(p)
+  return /^[a-f0-9]{16}\.(png|jpg|gif|webp)$/.test(name) && existsSync(`${ASSETS}/${name}`) ? `${ASSETS}/${name}` : undefined
+}
+
+/** The chat prompt. With images: one user message with image blocks first, then the text. */
+function prompt(text: string, images: string[] = []): string | AsyncIterable<SDKUserMessage> {
+  const blocks = images.flatMap((p) => {
+    const file = assetPath(p)
+    if (!file) return []
+    const ext = file.split('.').pop()!
+    const media_type = Object.keys(IMAGE_TYPES).find((t) => IMAGE_TYPES[t] === ext) as 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'
+    return [{ type: 'image' as const, source: { type: 'base64' as const, media_type, data: readFileSync(file).toString('base64') } }]
+  })
+  if (!blocks.length) return text
+  const note = `[Attached images, also saved as: ${images.join(', ')}]`
+  return (async function* () {
+    yield { type: 'user', message: { role: 'user', content: [...blocks, { type: 'text', text: `${note}\n${text}` }] }, parent_tool_use_id: null } as SDKUserMessage
+  })()
+}
 
 /** What the user is looking at, sent with each message: "[Viewport ...] [Selected: ...]". */
 function context(doc: CanvasDoc, msg: ChatMsg): string {
@@ -238,14 +271,14 @@ async function runChat(ws: Ws, msg: ChatMsg) {
   running = { abort, ws }
   try {
     const q = query({
-      prompt: `${context(board.doc, msg)}\n\n${msg.text}`,
+      prompt: prompt(`${context(board.doc, msg)}\n\n${msg.text}`, msg.images),
       options: {
         model: MODEL,
         effort: EFFORT,
         systemPrompt: SYSTEM,
         tools: READ_TOOLS, // built-ins limited to read-only file tools
         cwd: PROJECTS,
-        additionalDirectories: VAULT ? [VAULT] : [],
+        additionalDirectories: [BOARD_DIR, ...(VAULT ? [VAULT] : [])],
         allowedTools: [...BOARD_TOOLS, ...READ_TOOLS, ...GBRAIN_TOOLS],
         canUseTool: async (name) => ({ behavior: 'deny', message: `${name} is not allowed on the whiteboard (read-only).` }),
         mcpServers: { board: boardServer, ...GBRAIN },
@@ -276,10 +309,28 @@ async function runChat(ws: Ws, msg: ChatMsg) {
 
 // ---------------------------------------------------------------- HTTP + WebSocket
 
+/** POST /assets with raw image bytes -> { file: "assets/<hash>.<ext>" }. Same bytes, same name. */
+async function upload(req: Request): Promise<Response> {
+  const ext = IMAGE_TYPES[(req.headers.get('content-type') ?? '').split(';')[0]]
+  if (!ext) return Response.json({ error: 'Only PNG, JPEG, GIF or WebP images.' }, { status: 415 })
+  const bytes = new Uint8Array(await req.arrayBuffer())
+  if (!bytes.length || bytes.length > MAX_IMAGE) return Response.json({ error: 'Image must be 1 byte to 10 MB.' }, { status: 413 })
+  const name = `${new Bun.CryptoHasher('sha256').update(bytes).digest('hex').slice(0, 16)}.${ext}`
+  mkdirSync(ASSETS, { recursive: true })
+  if (!existsSync(`${ASSETS}/${name}`)) writeFileSync(`${ASSETS}/${name}`, bytes)
+  return Response.json({ file: `assets/${name}` })
+}
+
 Bun.serve({
   port: PORT,
-  fetch(req, server) {
-    if (new URL(req.url).pathname === '/ws' && server.upgrade(req)) return
+  async fetch(req, server) {
+    const path = new URL(req.url).pathname
+    if (path === '/ws' && server.upgrade(req)) return
+    if (path === '/assets' && req.method === 'POST') return upload(req)
+    if (path.startsWith('/assets/') && req.method === 'GET') {
+      const file = assetPath(path)
+      return file ? new Response(Bun.file(file), { headers: { 'cache-control': 'max-age=31536000, immutable' } }) : new Response('not found', { status: 404 })
+    }
     return new Response('agent-board server', { status: 200 })
   },
   websocket: {

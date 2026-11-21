@@ -53,12 +53,14 @@ function dagLayout(w: Work, cid: string, kids: CanvasNode[], rankdir: 'LR' | 'TB
 }
 
 /** Children with no edges among them: one row (LR) or one column (TB), centred on the cross axis. */
-function lineLayout(w: Work, kids: CanvasNode[], horizontal: boolean, origin: Point) {
+/** One line of kids. align "start" = top (row) / left (column) edges line up, as in lanes. */
+function lineLayout(w: Work, kids: CanvasNode[], horizontal: boolean, origin: Point, align: 'center' | 'start' = 'center') {
   const cross = Math.max(...kids.map((k) => (horizontal ? k.height : k.width)))
+  const off = (size: number) => (align === 'start' ? 0 : (cross - size) / 2)
   let at = horizontal ? origin.x : origin.y
   for (const k of kids) {
-    if (horizontal) moveTo(w, k, at, origin.y + (cross - k.height) / 2)
-    else moveTo(w, k, origin.x + (cross - k.width) / 2, at)
+    if (horizontal) moveTo(w, k, at, origin.y + off(k.height))
+    else moveTo(w, k, origin.x + off(k.width), at)
     at += (horizontal ? k.width : k.height) + TYPE.gap
   }
 }
@@ -158,6 +160,9 @@ export function layoutContainer(w: Work, cid: string, all: boolean, changed: Set
     if (containerEdges(w, cid, measure).edges.length) dagLayout(w, cid, kids, kind === 'dag-lr' ? 'LR' : 'TB', origin, measure)
     else if (movable.length > 4) gridLayout(w, movable, origin)
     else lineLayout(w, movable, kind === 'dag-lr', origin)
+    movable.forEach((k) => changed.add(k.id))
+  } else if ((kind === 'row' || kind === 'column') && dirty && movable.length) {
+    lineLayout(w, movable, kind === 'row', origin, 'start')
     movable.forEach((k) => changed.add(k.id))
   } else if (kind === 'grid' && dirty && movable.length) {
     gridLayout(w, movable, origin)

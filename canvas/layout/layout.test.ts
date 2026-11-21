@@ -167,3 +167,43 @@ describe('units', () => {
     expect(problems(out)).toEqual([])
   })
 })
+
+describe('image nodes', () => {
+  test('a full re-layout keeps the size of an image node (not sized from its file name)', () => {
+    const doc: CanvasDoc = {
+      nodes: [
+        { id: 'img', type: 'file', file: 'assets/0123456789abcdef.png', x: 0, y: 0, width: 480, height: 300, 'x-by': 'agent:claude' },
+        { id: 'a', type: 'text', text: 'Caption', x: 600, y: 0, width: 120, height: 48 },
+      ],
+      edges: [{ id: 'e', fromNode: 'a', toNode: 'img' }],
+    }
+    const out = applyLayoutOps(doc, layoutBoard(doc, measure, { all: true }))
+    expect(out.nodes.find((n) => n.id === 'img')).toMatchObject({ width: 480, height: 300 })
+  })
+})
+
+describe('lanes of cards (row of column groups)', () => {
+  test('lanes sit left to right, cards stack top-down in add order, card height fits its text', async () => {
+    const { createBoard } = await import('../core/board')
+    const b = createBoard({ nodes: [], edges: [] })
+    const r = b.apply(
+      [
+        { op: 'add_node', ref: 'root', kind: 'group', text: 'Stages', layout: 'row' },
+        { op: 'add_node', ref: 'l1', kind: 'group', text: 'Building', layout: 'column', parent: 'root' },
+        { op: 'add_node', ref: 'l2', kind: 'group', text: 'Live', layout: 'column', parent: 'root' },
+        { op: 'add_node', ref: 'a', kind: 'card', text: 'A\none line', progress: 30, parent: 'l1' },
+        { op: 'add_node', ref: 'b', kind: 'card', text: 'B\nfirst line\nsecond line', progress: 60, parent: 'l1' },
+        { op: 'add_node', ref: 'c', kind: 'card', text: 'C', parent: 'l2' },
+      ],
+      { by: 'agent:test' },
+    )
+    if (!r.ok) throw new Error(JSON.stringify(r.error))
+    const out = applyLayoutOps(b.doc, layoutBoard(b.doc, measure))
+    const n = (ref: string) => out.nodes.find((x) => x.id === r.ids[ref])!
+    expect(n('l1').x).toBeLessThan(n('l2').x)
+    expect(Math.abs(n('l1').y - n('l2').y)).toBeLessThan(1) // lanes top-aligned
+    expect(n('a').y + n('a').height).toBeLessThanOrEqual(n('b').y - TYPE.gap + 0.5)
+    expect(n('b').height).toBeGreaterThan(n('a').height)
+    expect(problems(out)).toEqual([])
+  })
+})

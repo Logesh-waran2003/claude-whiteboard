@@ -101,6 +101,9 @@ describe('validation errors', () => {
     ['bad layout', [{ op: 'add_node', kind: 'group', layout: 'tree' }], { field: 'layout' }],
     ['layout on non-group', [{ op: 'add_node', layout: 'grid' }], { field: 'layout' }],
     ['file and url', [{ op: 'add_node', file: 'a', url: 'b' }], { field: 'url' }],
+    ['progress over 100', [{ op: 'add_node', kind: 'card', progress: 120 }], { field: 'progress' }],
+    ['progress not a number', [{ op: 'add_node', kind: 'card', progress: '50%' }], { field: 'progress' }],
+    ['progress on group', [{ op: 'add_node', kind: 'group', progress: 10 }], { field: 'progress' }],
     ['group with file', [{ op: 'add_node', kind: 'group', file: 'a' }], { field: 'file' }],
     ['parent missing', [{ op: 'add_node', parent: 'nope' }], { field: 'parent' }],
     ['parent not group', [{ op: 'add_node', parent: 'a' }], { field: 'parent' }],
@@ -436,5 +439,23 @@ describe('JSON Canvas I/O', () => {
     expect(() =>
       fromJSON('{"nodes":[{"id":"a","type":"text","x":0,"y":0,"width":1,"height":1}],"edges":[{"id":"a","fromNode":"a","toNode":"a"}]}'),
     ).toThrow('duplicate')
+  })
+})
+
+describe('card + progress', () => {
+  test('add a card with progress, update it, remove the bar with null', () => {
+    const b = createBoard({ nodes: [], edges: [] })
+    const r = ok(b, [{ op: 'add_node', ref: 'c', kind: 'card', text: 'ShowTime\nBookings', progress: 80, color: '2' }])
+    const id = r.ids.c
+    expect(b.doc.nodes[0]).toMatchObject({ type: 'text', 'x-shape': 'card', 'x-progress': 80 })
+    ok(b, [{ op: 'update', id, progress: 90 }])
+    expect(b.doc.nodes[0]['x-progress']).toBe(90)
+    ok(b, [{ op: 'update', id, progress: null } as unknown as Op])
+    expect('x-progress' in b.doc.nodes[0]).toBe(false)
+  })
+  test('row and column are valid group layouts', () => {
+    const b = createBoard({ nodes: [], edges: [] })
+    ok(b, [{ op: 'add_node', kind: 'group', layout: 'row' }, { op: 'add_node', kind: 'group', layout: 'column' }])
+    expect(b.doc.nodes.map((n) => n['x-layout'])).toEqual(['row', 'column'])
   })
 })

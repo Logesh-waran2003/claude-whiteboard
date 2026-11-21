@@ -1,13 +1,16 @@
 # Matrix (2x2)
 
-Use for: impact vs effort, strategy maps, any two-axis placement.
+Use for: impact vs effort, "what should I do next?", strategy maps, any two-axis
+placement. Name each quadrant as an ACTION ("Finish: ship it", "Stalled: drop or
+restart?"), so the map answers the question, not only places items.
 
 Structure:
-- Four groups, one per quadrant, `layout: "grid"`. Group text names the quadrant
-  with both axis values, e.g. "High impact · Low effort".
+- Four groups, one per quadrant, `layout: "grid"`. Group text = the action, then
+  both axis values, e.g. "Do first · High impact · Low effort".
 - Root `layout: "grid"` so the four quadrants form a 2x2, in this order:
   top-left, top-right, bottom-left, bottom-right.
-- Items are `rect` nodes (or stickies) inside a quadrant. No edges.
+- Items are `rect` nodes, stickies, or `card` nodes (title + one line + `progress`)
+  inside a quadrant. No edges. Color = one meaning, with a legend in the reply.
 - Do not add other top-level nodes: the root grid would no longer be 2x2.
 - Use ops, not Mermaid.
 

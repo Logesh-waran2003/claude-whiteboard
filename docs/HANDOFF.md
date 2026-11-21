@@ -18,9 +18,12 @@ every write. Boards are **JSON Canvas** files (Obsidian opens them). Our own can
 | M6 quality scorer `canvas/quality/**` | ✅ 28 tests |
 | M7 app on our canvas (`server/`, `src/`) | ✅ server owns `.board/main.canvas`; tabs + disk sync; real Claude run works |
 | M8 CLI `canvas/cli/main.ts` | ✅ 16 tests; `bun run board check|render|import|layout|new|mcp` |
+| Images (2026-11-13) | ✅ paste/drop on canvas + attach/paste/drop in chat; stored in `.board/assets/<sha256-16>.<ext>`, served at `/assets`; Claude gets chat images as image blocks |
+| Visual boards (2026-11-13) | ✅ `card` shape (title + body + `progress` bar), `row`/`column` layouts (lanes), skill step "pick the picture" + 5-second test, refs `stages` + `timeline`, `snapshot` returns PNG (headless Chrome, `canvas/agent/png.ts`). Real run: status → lanes of cards (100), "where did time go" → timeline (100) |
+| UI (2026-11-13) | ✅ "Back to content" button when no shape is on screen; chat minimise button + floating "Claude" pill, Cmd+\ toggles |
 | M9 launch prep | ⏳ paths moved to `.env` (git-ignored). Needs decisions below |
 
-Proof: `bun run test` → 182 pass · `bun run typecheck` clean · `bun canvas/agent/e2e.ts` → score 100.
+Proof: `bun run test` → 190 pass · `bun run typecheck` clean · `bun canvas/agent/e2e.ts` → score 100.
 
 ## Run
 `bun run dev` → http://localhost:5181 (server port 8792; 8787/8790 are used by other local tools).
@@ -35,6 +38,9 @@ Personal read paths live in `.env` (see `.env.example`).
 - 4 crossings on the claude-app fixture (straight edges are not re-routed only for crossings).
 - Undo history resets when the server restarts or reloads the file.
 - Not verified: real trackpad pinch, system clipboard with other apps, PNG export on Linux.
+- Chat effort default is now `high` (`WB_EFFORT`). Image nodes are not in SVG/PNG export (`canvas/agent/export-svg.ts`) yet.
+- Scorer fix: an outer group no longer counts as "on the border" of a group nested in it (was -10 on every nested diagram).
+- `snapshot` PNG needs Google Chrome; without it the tool falls back to SVG text.
 - Score uses `approxMeasure` in CLI/server; the browser badge uses exact canvas measure.
 
 ## Rules for this repo

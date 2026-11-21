@@ -65,8 +65,11 @@ try {
   const check = JSON.parse(await call('check'))
   console.log('check: score', check.score, 'overlaps', check.overlaps.length, 'wraps', check.wraps.length, 'crossings', check.crossings)
 
-  const svg = await call('snapshot')
-  console.log('snapshot:', svg.length, 'chars, <svg', svg.startsWith('<svg'), ', has "REST API"', svg.includes('REST API'))
+  const svg = await call('snapshot', { format: 'svg' })
+  console.log('snapshot svg:', svg.length, 'chars, <svg', svg.startsWith('<svg'), ', has "REST API"', svg.includes('REST API'))
+  const png = (await client.callTool({ name: 'snapshot', arguments: {} })) as { content: { type: string; data?: string; mimeType?: string }[] }
+  const img = png.content.find((c) => c.type === 'image')
+  console.log('snapshot png:', img?.mimeType, img?.data ? Buffer.from(img.data, 'base64').subarray(1, 4).toString() : 'NO IMAGE')
 
   const disk = readFileSync(file, 'utf8')
   const board = fromJSON(disk)

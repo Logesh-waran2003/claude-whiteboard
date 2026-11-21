@@ -7,6 +7,8 @@ export type Msg = {
   id: string
   role: 'user' | 'claude'
   text: string
+  /** Attached image paths ("assets/<name>"), user messages only. */
+  images?: string[]
   steps?: Step[]
   shapeIds?: string[]
   pending?: boolean
@@ -23,7 +25,8 @@ type Props = {
   msgs: Msg[]
   online: boolean
   busySince: number | null
-  onSend: (text: string) => boolean
+  onSend: (text: string, images?: string[]) => boolean
+  uploadImage: (file: File) => Promise<string>
   onStop: () => void
   onRetry: (claudeId: string) => void
   onNewChat: () => void
@@ -38,8 +41,12 @@ const STARTERS = [
 const MIN_W = 320
 const MAX_W = 640
 
-export function Chat({ selected, onClearSelection, onShow, msgs, online, busySince, onSend, onStop, onRetry, onNewChat }: Props) {
+export function Chat({ selected, onClearSelection, onShow, msgs, online, busySince, onSend, uploadImage, onStop, onRetry, onNewChat }: Props) {
   const [input, setInput] = useState('')
+  const [images, setImages] = useState<string[]>([])
+  const [uploading, setUploading] = useState(0)
+  const [attachError, setAttachError] = useState<string>()
+  const fileRef = useRef<HTMLInputElement>(null)
   const [width, setWidth] = useState(() => Number(localStorage.getItem('wb-chat-w')) || 380)
   const [open, setOpen] = useState(() => localStorage.getItem('wb-chat-open') !== 'false')
   const listRef = useRef<HTMLDivElement>(null)
@@ -50,6 +57,18 @@ export function Chat({ selected, onClearSelection, onShow, msgs, online, busySin
     localStorage.setItem('wb-chat-w', String(width))
     localStorage.setItem('wb-chat-open', String(open))
   }, [width, open])
+
+  // Cmd+\ (Ctrl+\) minimises or opens the chat from anywhere.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === '\\' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault()
+        setOpen((o) => !o)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   // Keep the newest message in view while Claude streams.
   useEffect(() => {
@@ -66,7 +85,28 @@ export function Chat({ selected, onClearSelection, onShow, msgs, online, busySin
   }, [input])
 
   const submit = (text = input) => {
-    if (onSend(text.trim())) setInput('')
+    if (uploading) return
+    if (onSend(text.trim(), images)) {
+      setInput('')
+      setImages([])
+    }
+  }
+
+  const attach = async (files: File[]) => {
+    const imgs = files.filter((f) => f.type.startsWith('image/'))
+    if (!imgs.length) return
+    setAttachError(undefined)
+    setUploading((n) => n + imgs.length)
+    for (const f of imgs) {
+      try {
+        const path = await uploadImage(f)
+        setImages((p) => (p.includes(path) ? p : [...p, path]))
+      } catch (e) {
+        setAttachError((e as Error).message)
+      } finally {
+        setUploading((n) => n - 1)
+      }
+    }
   }
 
   const startResize = (e: React.PointerEvent) => {
@@ -84,8 +124,12 @@ export function Chat({ selected, onClearSelection, onShow, msgs, online, busySin
 
   if (!open) {
     return (
-      <button className="chat-reopen" onClick={() => setOpen(true)} aria-label="Open Claude chat">
+      <button className="chat-reopen" onClick={() => setOpen(true)} aria-label="Open Claude chat" title="Open chat (⌘\)">
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round">
+          <path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z" />
+        </svg>
         Claude
+        {busy && <span className="working-dot" aria-label="Claude is working" />}
       </button>
     )
   }
@@ -100,9 +144,10 @@ export function Chat({ selected, onClearSelection, onShow, msgs, online, busySin
         <button className="ghost" onClick={onNewChat} disabled={busy || msgs.length === 0}>
           New chat
         </button>
-        <button className="ghost icon" onClick={() => setOpen(false)} aria-label="Hide chat" title="Hide chat">
-          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
-            <path d="M6 3l5 5-5 5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        <button className="ghost icon" onClick={() => setOpen(false)} aria-label="Minimise chat" title="Minimise chat (⌘\)">
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="2" y="2.5" width="12" height="11" rx="2" />
+            <path d="M10 2.5v11M5.5 6.5L7.5 8l-2 1.5" />
           </svg>
         </button>
       </header>
@@ -125,6 +170,13 @@ export function Chat({ selected, onClearSelection, onShow, msgs, online, busySin
           msgs.map((m) =>
             m.role === 'user' ? (
               <div key={m.id} className="note">
+                {!!m.images?.length && (
+                  <div className="note-images">
+                    {m.images.map((p) => (
+                      <img key={p} src={`/${p}`} alt="Attached image" />
+                    ))}
+                  </div>
+                )}
                 {m.text}
               </div>
             ) : (
@@ -136,6 +188,12 @@ export function Chat({ selected, onClearSelection, onShow, msgs, online, busySin
 
       <form
         className="composer"
+        onDragOver={(e) => e.dataTransfer.types.includes('Files') && e.preventDefault()}
+        onDrop={(e) => {
+          if (!e.dataTransfer.files.length) return
+          e.preventDefault()
+          void attach([...e.dataTransfer.files])
+        }}
         onSubmit={(e) => {
           e.preventDefault()
           submit()
@@ -151,13 +209,51 @@ export function Chat({ selected, onClearSelection, onShow, msgs, online, busySin
             </button>
           </div>
         )}
+        {(images.length > 0 || uploading > 0 || attachError) && (
+          <div className="attachments">
+            {images.map((p) => (
+              <span key={p} className="attachment">
+                <img src={`/${p}`} alt="Attached image" />
+                <button type="button" aria-label="Remove image" title="Remove" onClick={() => setImages((l) => l.filter((x) => x !== p))}>
+                  ×
+                </button>
+              </span>
+            ))}
+            {uploading > 0 && <span className="attachment is-loading" aria-label="Uploading image" />}
+            {attachError && <span className="attach-error" role="alert">{attachError}</span>}
+          </div>
+        )}
         <div className="composer-well">
+          <button type="button" className="ghost icon attach" onClick={() => fileRef.current?.click()} disabled={!online} aria-label="Attach image" title="Attach image (or paste / drop)">
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
+              <rect x="2" y="3" width="12" height="10" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
+              <circle cx="6" cy="6.5" r="1.2" fill="currentColor" />
+              <path d="M3 12l3.5-3.5 2.5 2.5 2-2 2.5 2.5" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+            </svg>
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/png,image/jpeg,image/gif,image/webp"
+            multiple
+            hidden
+            onChange={(e) => {
+              void attach([...(e.target.files ?? [])])
+              e.target.value = ''
+            }}
+          />
           <textarea
             ref={inputRef}
             rows={1}
             value={input}
             placeholder={online ? 'Ask Claude to change the board' : 'Start the server with bun run dev'}
             onChange={(e) => setInput(e.target.value)}
+            onPaste={(e) => {
+              const files = [...e.clipboardData.files]
+              if (!files.some((f) => f.type.startsWith('image/'))) return
+              e.preventDefault()
+              void attach(files)
+            }}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                 e.preventDefault()
@@ -171,12 +267,12 @@ export function Chat({ selected, onClearSelection, onShow, msgs, online, busySin
               Stop
             </button>
           ) : (
-            <button type="submit" className="primary" disabled={!online || !input.trim()}>
+            <button type="submit" className="primary" disabled={!online || uploading > 0 || (!input.trim() && !images.length)}>
               Send
             </button>
           )}
         </div>
-        <p className="composer-hint">Enter to send. Shift+Enter for a new line.</p>
+        <p className="composer-hint">Enter to send. Shift+Enter for a new line. Paste or drop images.</p>
       </form>
     </aside>
   )
@@ -190,14 +286,19 @@ function Reply({ m, busySince, onShow, onRetry }: { m: Msg; busySince: number | 
   return (
     <article className="reply" aria-busy={m.pending}>
       {steps.length > 0 && (
-        <ol className="trace">
-          {steps.map((s, i) => (
-            <li key={i} className={m.pending && i === steps.length - 1 ? 'is-live' : ''}>
-              {s.verb}
-              {s.detail && <> {s.code ? <code>{s.detail}</code> : <span className="trace-detail">{s.detail}</span>}</>}
-            </li>
-          ))}
-        </ol>
+        // Folded by default: one line (the live step while working, the step count when done).
+        <details className="trace-box">
+          <summary>
+            {m.pending ? <StepText s={steps.at(-1)!} /> : `${steps.length} ${steps.length === 1 ? 'step' : 'steps'}`}
+          </summary>
+          <ol className="trace">
+            {steps.map((s, i) => (
+              <li key={i} className={m.pending && i === steps.length - 1 ? 'is-live' : ''}>
+                <StepText s={s} />
+              </li>
+            ))}
+          </ol>
+        </details>
       )}
 
       {m.pending && <Working since={busySince} quiet={steps.length > 0 || !!m.text} />}
@@ -240,6 +341,15 @@ function Reply({ m, busySince, onShow, onRetry }: { m: Msg; busySince: number | 
         </div>
       )}
     </article>
+  )
+}
+
+function StepText({ s }: { s: Step }) {
+  return (
+    <>
+      {s.verb}
+      {s.detail && <> {s.code ? <code>{s.detail}</code> : <span className="trace-detail">{s.detail}</span>}</>}
+    </>
   )
 }
 

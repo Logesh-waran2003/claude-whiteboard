@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { canvasMeasure } from '../canvas/core/measure'
+import type { CanvasNode, GroupNode } from '../canvas/core/model'
 import { scoreDetailed } from '../canvas/quality/score'
 import { BoardView, type BoardViewHandle, FONT, type Mode } from '../canvas/render'
 import { Chat, type Msg } from './Chat'
@@ -10,6 +11,14 @@ const uid = () => crypto.randomUUID()
 const measure = canvasMeasure(FONT)
 
 type Viewport = { x: number; y: number; width: number; height: number }
+
+/** Store an image on the server (next to the board file). Returns its path, e.g. "assets/ab12.png". */
+async function uploadImage(file: File): Promise<string> {
+  const res = await fetch('/assets', { method: 'POST', headers: { 'content-type': file.type }, body: file })
+  const body = await res.json()
+  if (!res.ok) throw new Error(body.error ?? `upload failed (${res.status})`)
+  return body.file
+}
 
 export default function App() {
   const wsRef = useRef<WebSocket | null>(null)
@@ -93,12 +102,12 @@ export default function App() {
     }
   }, [])
 
-  const send = (text: string) => {
-    if (!text.trim() || busySince || !online || !board) return false
-    setMsgs((p) => [...p, { id: uid(), role: 'user', text }, { id: uid(), role: 'claude', text: '', steps: [], pending: true }])
+  const send = (text: string, images: string[] = []) => {
+    if ((!text.trim() && !images.length) || busySince || !online || !board) return false
+    setMsgs((p) => [...p, { id: uid(), role: 'user', text, images }, { id: uid(), role: 'claude', text: '', steps: [], pending: true }])
     setBusySince(Date.now())
     const viewport = viewRef.current?.getViewport() ?? viewportRef.current
-    wsRef.current!.send(JSON.stringify({ type: 'chat', text, sessionId, viewport, selected }))
+    wsRef.current!.send(JSON.stringify({ type: 'chat', text, sessionId, viewport, selected, images }))
     return true
   }
 
@@ -108,7 +117,7 @@ export default function App() {
     if (prompt?.role !== 'user') return
     setMsgs((p) => p.slice(0, i - 1))
     // Wait for state to settle, then resend the same prompt.
-    setTimeout(() => send(prompt.text))
+    setTimeout(() => send(prompt.text, prompt.images))
   }
 
   const showOnBoard = (ids: string[]) => {
@@ -129,8 +138,9 @@ export default function App() {
       <div className="canvas">
         {board ? (
           <>
-            <BoardView board={board} measure={measure} mode={mode} onSelectionChange={setSelected} onViewportChange={onViewport} handleRef={viewRef} />
+            <BoardView board={board} measure={measure} mode={mode} onSelectionChange={setSelected} onViewportChange={onViewport} handleRef={viewRef} uploadImage={uploadImage} />
             <BoardBar board={board} mode={mode} setMode={setMode} />
+            <BoardNav board={board} onGo={(id) => viewRef.current?.zoomToFit([id])} />
           </>
         ) : (
           <p className="board-wait">{online ? 'Loading the board…' : 'Start the server with bun run dev'}</p>
@@ -144,6 +154,7 @@ export default function App() {
         online={online}
         busySince={busySince}
         onSend={send}
+        uploadImage={uploadImage}
         onStop={() => wsRef.current?.send(JSON.stringify({ type: 'stop' }))}
         onRetry={retry}
         onNewChat={() => {
@@ -189,6 +200,8 @@ function BoardBar({ board, mode, setMode }: { board: RemoteBoard; mode: Mode; se
           </button>
         ))}
       </div>
+      <ThemeToggle />
+      <DotsToggle />
       <div className="segmented">
         <button onClick={() => board.undo()} disabled={!board.canUndo()} title="Undo (Cmd+Z)">
           Undo
@@ -197,6 +210,83 @@ function BoardBar({ board, mode, setMode }: { board: RemoteBoard; mode: Mode; se
           Redo
         </button>
       </div>
+    </div>
+  )
+}
+
+/** Left-edge nav: one line per diagram (top-level group). Hover shows its title and contents; click zooms to it. */
+function BoardNav({ board, onGo }: { board: RemoteBoard; onGo: (id: string) => void }) {
+  const doc = useSyncExternalStore(
+    (cb) => board.subscribe(cb),
+    () => board.doc,
+  )
+  const [active, setActive] = useState<string>()
+  const sections = useMemo(() => {
+    const text = (n: CanvasNode) => (n.type === 'text' ? n.text : n.type === 'group' ? (n.label ?? '') : n.type === 'file' ? n.file : n.url)
+    return doc.nodes
+      .filter((n): n is GroupNode => n.type === 'group' && !n['x-parent'])
+      .sort((a, b) => a.y - b.y || a.x - b.x)
+      .map((g) => {
+        const kids = doc.nodes.filter((n) => n['x-parent'] === g.id).map(text).filter(Boolean)
+        return { id: g.id, title: g.label || 'Untitled diagram', body: kids.join(' · ') }
+      })
+  }, [doc])
+  if (!sections.length) return null
+  return (
+    <nav className="board-nav" aria-label="Jump to diagram">
+      {sections.map((s) => (
+        <button
+          key={s.id}
+          className={`nav-tick ${active === s.id ? 'is-active' : ''}`}
+          aria-label={`Go to ${s.title}`}
+          onClick={() => {
+            setActive(s.id)
+            onGo(s.id)
+          }}
+        >
+          <span className="nav-card" aria-hidden>
+            <strong>{s.title}</strong>
+            {s.body && <span>{s.body}</span>}
+          </span>
+        </button>
+      ))}
+    </nav>
+  )
+}
+
+/** Show or hide the dot grid. The choice is saved. */
+function DotsToggle() {
+  const [dots, setDots] = useState(() => localStorage.getItem('wb-dots') !== 'off')
+  useEffect(() => {
+    document.documentElement.dataset.dots = dots ? 'on' : 'off'
+    localStorage.setItem('wb-dots', dots ? 'on' : 'off')
+  }, [dots])
+  return (
+    <div className="segmented">
+      <button onClick={() => setDots(!dots)} aria-pressed={dots} title={dots ? 'Hide the dot grid' : 'Show the dot grid'}>
+        {dots ? 'Hide dots' : 'Show dots'}
+      </button>
+    </div>
+  )
+}
+
+/** Light / dark switch. The choice is saved; index.html applies it before first paint. */
+function ThemeToggle() {
+  const [theme, setTheme] = useState(() => document.documentElement.dataset.theme ?? 'light')
+  const next = theme === 'dark' ? 'light' : 'dark'
+  return (
+    <div className="segmented">
+      <button
+        onClick={() => {
+          document.documentElement.dataset.theme = next
+          localStorage.setItem('theme', next)
+          setTheme(next)
+        }}
+        aria-label={`Switch to ${next} mode`}
+        title={`Switch to ${next} mode`}
+      >
+        {theme === 'dark' ? 'Light mode' : 'Dark mode'}
+      </button>
     </div>
   )
 }
